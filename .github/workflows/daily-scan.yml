@@ -2,7 +2,7 @@ name: 台股盤後掃描
 
 on:
   schedule:
-    - cron: "0 12 * * 1-5"  # 台灣時間週一~週五 20:00(UTC 12:00)
+    - cron: "17 11 * * 1-5"  # 台灣時間週一~週五 19:17(UTC 11:17),刻意避開整點,GitHub 整點排程常延遲數小時
   workflow_dispatch: {}      # 允許在 GitHub 網頁上手動觸發,方便測試
 
 permissions:
@@ -25,6 +25,7 @@ jobs:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/main.py
 
       - name: 把當天資料存回 repo

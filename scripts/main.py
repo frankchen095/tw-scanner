@@ -1,7 +1,8 @@
 """
-main.py —— 主程式:抓資料 → 產生功能1/2/4的報表 → 推播 Telegram
+main.py —— 主程式:抓資料 → 產生功能1/2/3/4的報表 → 推播 Telegram
 
-(功能3的新聞+AI分析還沒接上,之後申請好 Anthropic API key 再加)
+功能3(新聞+AI分析)需要環境變數 ANTHROPIC_API_KEY,沒設定的話該區塊會顯示提示,
+不會讓整支程式當掉。
 
 用法:
     python scripts/main.py                       # 用今天日期跑,抓資料+送Telegram
@@ -24,6 +25,7 @@ from fetchers import fetch_price, fetch_institutional, fetch_dama  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent / "reports"))
 import feature1_dama_institutional as feature1  # noqa: E402
 import feature2_joint_buy as feature2  # noqa: E402
+import feature3_news as feature3  # noqa: E402
 import feature4_breakout as feature4  # noqa: E402
 
 TOP_N_FOR_DAMA = 300
@@ -63,6 +65,8 @@ def main():
     blocks += [("body", s) for s in feature1.build(conn, day)]
     blocks.append(("header", f"功能2:外資+投信同買({day})"))
     blocks += [("body", s) for s in feature2.build(conn, day)]
+    blocks.append(("header", f"功能3:新聞事件分析({day})"))
+    blocks += [("prose", s) for s in feature3.build(conn, day)]
     blocks.append(("header", f"功能4:帶量突破盤整({day})"))
     blocks += [("body", s) for s in feature4.build(conn, day)]
 
@@ -70,7 +74,12 @@ def main():
 
     for kind, text in blocks:
         escaped = html.escape(text)
-        msg = f"<b>{escaped}</b>" if kind == "header" else f"<pre>{escaped}</pre>"
+        if kind == "header":
+            msg = f"<b>{escaped}</b>"
+        elif kind == "prose":
+            msg = escaped
+        else:
+            msg = f"<pre>{escaped}</pre>"
         if args.dry_run:
             print("\n" + "=" * 60)
             print(text)

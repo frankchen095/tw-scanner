@@ -2,9 +2,10 @@
 common.py —— 共用工具
 
 你不需要動這個檔案。它負責:
-  - 讀取環境變數(FINMIND_TOKEN / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)
+  - 讀取環境變數(FINMIND_TOKEN / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / ANTHROPIC_API_KEY)
   - 打 FinMind API,遇到額度限制自動等待重試
   - 送 Telegram 訊息(太長會自動分段)
+  - 呼叫 Claude API(功能3新聞分析用)
 """
 
 import os
@@ -19,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
+CLAUDE_URL = "https://api.anthropic.com/v1/messages"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 
 def get_env(name):
@@ -99,3 +102,28 @@ def send_telegram(text, parse_mode="HTML"):
         if resp.status_code != 200:
             print(f"    Telegram 傳送失敗: {resp.status_code} {resp.text}")
         time.sleep(1)
+
+
+def call_claude(prompt, max_tokens=1500):
+    """呼叫 Claude API,回傳文字回覆。找不到 ANTHROPIC_API_KEY 或呼叫失敗會丟出例外(不會中斷整支程式)。"""
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("找不到環境變數 ANTHROPIC_API_KEY")
+
+    resp = requests.post(
+        CLAUDE_URL,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": CLAUDE_MODEL,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return "".join(block.get("text", "") for block in data.get("content", []))
