@@ -1,0 +1,696 @@
+[
+ {
+  "group": "群益金鼎-內湖",
+  "county": "台北市",
+  "trader_ids": [
+   "918d"
+  ],
+  "hit_rate": 0.4615,
+  "n_events": 78,
+  "n_hits": 36
+ },
+ {
+  "group": "台新-松德(原元富-松德)",
+  "county": "台北市",
+  "trader_ids": [
+   "592a",
+   "9B2a"
+  ],
+  "hit_rate": 0.4444,
+  "n_events": 36,
+  "n_hits": 16
+ },
+ {
+  "group": "宏遠-高雄",
+  "county": "高雄市",
+  "trader_ids": [
+   "126Q"
+  ],
+  "hit_rate": 0.4324,
+  "n_events": 37,
+  "n_hits": 16
+ },
+ {
+  "group": "元大-嘉義",
+  "county": "嘉義市",
+  "trader_ids": [
+   "989g"
+  ],
+  "hit_rate": 0.4271,
+  "n_events": 96,
+  "n_hits": 41
+ },
+ {
+  "group": "兆豐-大安",
+  "county": "台北市",
+  "trader_ids": [
+   "700j"
+  ],
+  "hit_rate": 0.411,
+  "n_events": 73,
+  "n_hits": 30
+ },
+ {
+  "group": "台新-北新莊(原元富-新莊)",
+  "county": "新北市",
+  "trader_ids": [
+   "5928",
+   "9B28"
+  ],
+  "hit_rate": 0.4,
+  "n_events": 30,
+  "n_hits": 12
+ },
+ {
+  "group": "元大-大安",
+  "county": "台北市",
+  "trader_ids": [
+   "983N"
+  ],
+  "hit_rate": 0.3974,
+  "n_events": 78,
+  "n_hits": 31
+ },
+ {
+  "group": "群益金鼎-竹南",
+  "county": "苗栗縣",
+  "trader_ids": [
+   "918i"
+  ],
+  "hit_rate": 0.3939,
+  "n_events": 33,
+  "n_hits": 13
+ },
+ {
+  "group": "群益金鼎-新莊",
+  "county": "新北市",
+  "trader_ids": [
+   "918G"
+  ],
+  "hit_rate": 0.3934,
+  "n_events": 61,
+  "n_hits": 24
+ },
+ {
+  "group": "元大-新盛",
+  "county": "新北市",
+  "trader_ids": [
+   "9869"
+  ],
+  "hit_rate": 0.3909,
+  "n_events": 110,
+  "n_hits": 43
+ },
+ {
+  "group": "永豐金-羅東",
+  "county": "宜蘭縣",
+  "trader_ids": [
+   "9A9A"
+  ],
+  "hit_rate": 0.3864,
+  "n_events": 44,
+  "n_hits": 17
+ },
+ {
+  "group": "元大-崇德",
+  "county": "台中市",
+  "trader_ids": [
+   "981S"
+  ],
+  "hit_rate": 0.375,
+  "n_events": 72,
+  "n_hits": 27
+ },
+ {
+  "group": "元大-三重",
+  "county": "新北市",
+  "trader_ids": [
+   "988C"
+  ],
+  "hit_rate": 0.375,
+  "n_events": 72,
+  "n_hits": 27
+ },
+ {
+  "group": "國票-博愛",
+  "county": "台北市",
+  "trader_ids": [
+   "779z"
+  ],
+  "hit_rate": 0.375,
+  "n_events": 40,
+  "n_hits": 15
+ },
+ {
+  "group": "元大-彰化",
+  "county": "彰化縣",
+  "trader_ids": [
+   "981G"
+  ],
+  "hit_rate": 0.375,
+  "n_events": 40,
+  "n_hits": 15
+ },
+ {
+  "group": "福勝",
+  "county": "新北市",
+  "trader_ids": [
+   "6950"
+  ],
+  "hit_rate": 0.375,
+  "n_events": 40,
+  "n_hits": 15
+ },
+ {
+  "group": "兆豐-北高雄",
+  "county": "高雄市",
+  "trader_ids": [
+   "700I"
+  ],
+  "hit_rate": 0.3738,
+  "n_events": 107,
+  "n_hits": 40
+ },
+ {
+  "group": "永豐金-敦北",
+  "county": "台北市",
+  "trader_ids": [
+   "9A89"
+  ],
+  "hit_rate": 0.3723,
+  "n_events": 231,
+  "n_hits": 86
+ },
+ {
+  "group": "富邦-南員林",
+  "county": "彰化縣",
+  "trader_ids": [
+   "961R"
+  ],
+  "hit_rate": 0.371,
+  "n_events": 62,
+  "n_hits": 23
+ },
+ {
+  "group": "凱基-市府",
+  "county": "台北市",
+  "trader_ids": [
+   "920D"
+  ],
+  "hit_rate": 0.3679,
+  "n_events": 106,
+  "n_hits": 39
+ },
+ {
+  "group": "凱基-城中",
+  "county": "台北市",
+  "trader_ids": [
+   "9227"
+  ],
+  "hit_rate": 0.3677,
+  "n_events": 650,
+  "n_hits": 239
+ },
+ {
+  "group": "第一金-自由",
+  "county": "台中市",
+  "trader_ids": [
+   "538E"
+  ],
+  "hit_rate": 0.3671,
+  "n_events": 79,
+  "n_hits": 29
+ },
+ {
+  "group": "群益金鼎-東大",
+  "county": "新竹市",
+  "trader_ids": [
+   "9135"
+  ],
+  "hit_rate": 0.3611,
+  "n_events": 72,
+  "n_hits": 26
+ },
+ {
+  "group": "凱基-信義",
+  "county": "台北市",
+  "trader_ids": [
+   "9216"
+  ],
+  "hit_rate": 0.3545,
+  "n_events": 1024,
+  "n_hits": 363
+ },
+ {
+  "group": "華南永昌-麻豆",
+  "county": "台南市",
+  "trader_ids": [
+   "9308"
+  ],
+  "hit_rate": 0.3529,
+  "n_events": 68,
+  "n_hits": 24
+ },
+ {
+  "group": "統一-士林",
+  "county": "台北市",
+  "trader_ids": [
+   "585M"
+  ],
+  "hit_rate": 0.3494,
+  "n_events": 83,
+  "n_hits": 29
+ },
+ {
+  "group": "兆豐-板橋",
+  "county": "新北市",
+  "trader_ids": [
+   "700B"
+  ],
+  "hit_rate": 0.3492,
+  "n_events": 63,
+  "n_hits": 22
+ },
+ {
+  "group": "元大-士林",
+  "county": "台北市",
+  "trader_ids": [
+   "981j"
+  ],
+  "hit_rate": 0.3485,
+  "n_events": 241,
+  "n_hits": 84
+ },
+ {
+  "group": "統一-城中",
+  "county": "台北市",
+  "trader_ids": [
+   "5854"
+  ],
+  "hit_rate": 0.3476,
+  "n_events": 561,
+  "n_hits": 195
+ },
+ {
+  "group": "中國信託-松江",
+  "county": "台北市",
+  "trader_ids": [
+   "6167"
+  ],
+  "hit_rate": 0.3472,
+  "n_events": 216,
+  "n_hits": 75
+ },
+ {
+  "group": "群益金鼎-台北",
+  "county": "台北市",
+  "trader_ids": [
+   "918X"
+  ],
+  "hit_rate": 0.346,
+  "n_events": 211,
+  "n_hits": 73
+ },
+ {
+  "group": "臺灣企銀-桃園",
+  "county": "桃園市",
+  "trader_ids": [
+   "111E"
+  ],
+  "hit_rate": 0.3455,
+  "n_events": 55,
+  "n_hits": 19
+ },
+ {
+  "group": "宏遠-館前",
+  "county": "台北市",
+  "trader_ids": [
+   "126U"
+  ],
+  "hit_rate": 0.3433,
+  "n_events": 67,
+  "n_hits": 23
+ },
+ {
+  "group": "元大-西屯",
+  "county": "台中市",
+  "trader_ids": [
+   "980w"
+  ],
+  "hit_rate": 0.3404,
+  "n_events": 47,
+  "n_hits": 16
+ },
+ {
+  "group": "富邦-南屯",
+  "county": "台中市",
+  "trader_ids": [
+   "9666"
+  ],
+  "hit_rate": 0.3401,
+  "n_events": 444,
+  "n_hits": 151
+ },
+ {
+  "group": "中國信託-永康",
+  "county": "台南市",
+  "trader_ids": [
+   "6163"
+  ],
+  "hit_rate": 0.339,
+  "n_events": 59,
+  "n_hits": 20
+ },
+ {
+  "group": "合庫-高雄",
+  "county": "高雄市",
+  "trader_ids": [
+   "1023"
+  ],
+  "hit_rate": 0.3364,
+  "n_events": 107,
+  "n_hits": 36
+ },
+ {
+  "group": "永豐金-中正",
+  "county": "台北市",
+  "trader_ids": [
+   "9A9U"
+  ],
+  "hit_rate": 0.3362,
+  "n_events": 116,
+  "n_hits": 39
+ },
+ {
+  "group": "凱基-松山",
+  "county": "台北市",
+  "trader_ids": [
+   "9217"
+  ],
+  "hit_rate": 0.3349,
+  "n_events": 218,
+  "n_hits": 73
+ },
+ {
+  "group": "康和-台北",
+  "county": "台北市",
+  "trader_ids": [
+   "845U"
+  ],
+  "hit_rate": 0.3333,
+  "n_events": 69,
+  "n_hits": 23
+ },
+ {
+  "group": "凱基-宜蘭",
+  "county": null,
+  "trader_ids": [
+   "920M"
+  ],
+  "hit_rate": 0.3333,
+  "n_events": 54,
+  "n_hits": 18
+ },
+ {
+  "group": "兆豐-嘉義",
+  "county": "嘉義市",
+  "trader_ids": [
+   "7001"
+  ],
+  "hit_rate": 0.3333,
+  "n_events": 30,
+  "n_hits": 10
+ },
+ {
+  "group": "元大-竹科",
+  "county": "新竹市",
+  "trader_ids": [
+   "980K"
+  ],
+  "hit_rate": 0.3312,
+  "n_events": 160,
+  "n_hits": 53
+ },
+ {
+  "group": "元大-敦南",
+  "county": "台北市",
+  "trader_ids": [
+   "989P"
+  ],
+  "hit_rate": 0.3303,
+  "n_events": 109,
+  "n_hits": 36
+ },
+ {
+  "group": "永豐金-復興",
+  "county": "台北市",
+  "trader_ids": [
+   "9A9Z"
+  ],
+  "hit_rate": 0.3289,
+  "n_events": 149,
+  "n_hits": 49
+ },
+ {
+  "group": "永豐金-萬盛",
+  "county": "台北市",
+  "trader_ids": [
+   "9A92"
+  ],
+  "hit_rate": 0.3281,
+  "n_events": 192,
+  "n_hits": 63
+ },
+ {
+  "group": "元大-蘆洲",
+  "county": "新北市",
+  "trader_ids": [
+   "9857"
+  ],
+  "hit_rate": 0.3281,
+  "n_events": 64,
+  "n_hits": 21
+ },
+ {
+  "group": "富邦-南港",
+  "county": "台北市",
+  "trader_ids": [
+   "962A"
+  ],
+  "hit_rate": 0.3269,
+  "n_events": 52,
+  "n_hits": 17
+ },
+ {
+  "group": "凱基-興隆",
+  "county": "台北市",
+  "trader_ids": [
+   "9289"
+  ],
+  "hit_rate": 0.3265,
+  "n_events": 98,
+  "n_hits": 32
+ },
+ {
+  "group": "永豐金-員林",
+  "county": "彰化縣",
+  "trader_ids": [
+   "9A9C"
+  ],
+  "hit_rate": 0.3243,
+  "n_events": 37,
+  "n_hits": 12
+ },
+ {
+  "group": "群益金鼎-敦南",
+  "county": "台北市",
+  "trader_ids": [
+   "9101"
+  ],
+  "hit_rate": 0.3238,
+  "n_events": 210,
+  "n_hits": 68
+ },
+ {
+  "group": "統一-敦南",
+  "county": "台北市",
+  "trader_ids": [
+   "5852"
+  ],
+  "hit_rate": 0.3231,
+  "n_events": 195,
+  "n_hits": 63
+ },
+ {
+  "group": "國票-安和",
+  "county": "台北市",
+  "trader_ids": [
+   "779Z"
+  ],
+  "hit_rate": 0.3223,
+  "n_events": 1114,
+  "n_hits": 359
+ },
+ {
+  "group": "台新-西松(原元富-西松)",
+  "county": "台北市",
+  "trader_ids": [
+   "592n",
+   "9B2n"
+  ],
+  "hit_rate": 0.3191,
+  "n_events": 188,
+  "n_hits": 60
+ },
+ {
+  "group": "富邦-台北",
+  "county": "台北市",
+  "trader_ids": [
+   "9623"
+  ],
+  "hit_rate": 0.317,
+  "n_events": 448,
+  "n_hits": 142
+ },
+ {
+  "group": "富邦-仁愛",
+  "county": "台北市",
+  "trader_ids": [
+   "9676"
+  ],
+  "hit_rate": 0.3169,
+  "n_events": 508,
+  "n_hits": 161
+ },
+ {
+  "group": "永豐金-豐原",
+  "county": "台中市",
+  "trader_ids": [
+   "9A9Q"
+  ],
+  "hit_rate": 0.3158,
+  "n_events": 38,
+  "n_hits": 12
+ },
+ {
+  "group": "富邦-景美(原日盛-景美)",
+  "county": "台北市",
+  "trader_ids": [
+   "116G",
+   "961S"
+  ],
+  "hit_rate": 0.3137,
+  "n_events": 51,
+  "n_hits": 16
+ },
+ {
+  "group": "永豐金-忠孝",
+  "county": "台北市",
+  "trader_ids": [
+   "9A9D"
+  ],
+  "hit_rate": 0.3133,
+  "n_events": 83,
+  "n_hits": 26
+ },
+ {
+  "group": "富邦-新店",
+  "county": "新北市",
+  "trader_ids": [
+   "9661"
+  ],
+  "hit_rate": 0.3101,
+  "n_events": 474,
+  "n_hits": 147
+ },
+ {
+  "group": "富邦-員林",
+  "county": "彰化縣",
+  "trader_ids": [
+   "9672"
+  ],
+  "hit_rate": 0.3095,
+  "n_events": 42,
+  "n_hits": 13
+ },
+ {
+  "group": "華南永昌-小港",
+  "county": "高雄市",
+  "trader_ids": [
+   "9323"
+  ],
+  "hit_rate": 0.3077,
+  "n_events": 39,
+  "n_hits": 12
+ },
+ {
+  "group": "凱基-三重",
+  "county": "新北市",
+  "trader_ids": [
+   "9205"
+  ],
+  "hit_rate": 0.3057,
+  "n_events": 157,
+  "n_hits": 48
+ },
+ {
+  "group": "國票-中正",
+  "county": "高雄市",
+  "trader_ids": [
+   "7797"
+  ],
+  "hit_rate": 0.3056,
+  "n_events": 36,
+  "n_hits": 11
+ },
+ {
+  "group": "永豐金-信義",
+  "county": "台北市",
+  "trader_ids": [
+   "9A9R"
+  ],
+  "hit_rate": 0.3013,
+  "n_events": 395,
+  "n_hits": 119
+ },
+ {
+  "group": "新光-新竹",
+  "county": "新竹縣",
+  "trader_ids": [
+   "8563"
+  ],
+  "hit_rate": 0.301,
+  "n_events": 103,
+  "n_hits": 31
+ },
+ {
+  "group": "元大-北投",
+  "county": "台北市",
+  "trader_ids": [
+   "989A"
+  ],
+  "hit_rate": 0.3008,
+  "n_events": 123,
+  "n_hits": 37
+ },
+ {
+  "group": "國票-台中",
+  "county": "台中市",
+  "trader_ids": [
+   "779v"
+  ],
+  "hit_rate": 0.3005,
+  "n_events": 213,
+  "n_hits": 64
+ },
+ {
+  "group": "富邦-木柵",
+  "county": "台北市",
+  "trader_ids": [
+   "961M"
+  ],
+  "hit_rate": 0.3,
+  "n_events": 50,
+  "n_hits": 15
+ }
+]

@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from db import DAMA_TRADER_ID  # noqa: E402
 from helpers import (  # noqa: E402
     recent_dates,
     get_stock_info,
@@ -32,7 +33,10 @@ def _dama_table(conn, report_date, n_days, valid_ids):
     if not dates:
         return None
     qmarks = ",".join("?" * len(dates))
-    df = pd.read_sql(f"SELECT * FROM daily_dama WHERE date IN ({qmarks})", conn, params=dates)
+    df = pd.read_sql(
+        f"SELECT * FROM daily_dama WHERE date IN ({qmarks}) AND trader_id = ?",
+        conn, params=dates + [DAMA_TRADER_ID],
+    )
     df = df[df["stock_id"].isin(valid_ids)]
     if df.empty:
         return None

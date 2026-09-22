@@ -27,6 +27,7 @@ import feature1_dama_institutional as feature1  # noqa: E402
 import feature2_joint_buy as feature2  # noqa: E402
 import feature3_news as feature3  # noqa: E402
 import feature4_breakout as feature4  # noqa: E402
+import feature5_tracked_brokers as feature5  # noqa: E402
 
 TOP_N_FOR_DAMA = 300
 
@@ -69,6 +70,8 @@ def main():
     blocks += [("prose", s) for s in feature3.build(conn, day)]
     blocks.append(("header", f"功能4:帶量突破盤整({day})"))
     blocks += [("body", s) for s in feature4.build(conn, day)]
+    blocks.append(("header", f"功能5:追蹤分點今日買超({day})"))
+    blocks += [("body", s) for s in feature5.build(conn, day)]
 
     conn.close()
 

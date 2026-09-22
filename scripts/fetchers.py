@@ -13,7 +13,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import finmind_query  # noqa: E402
-from db import DAMA_TRADER_ID  # noqa: E402
+from db import ALL_WATCHED_TRADER_IDS  # noqa: E402
 from helpers import get_valid_stock_ids  # noqa: E402
 
 SLEEP = 0.3
@@ -67,22 +67,28 @@ def fetch_institutional(conn, day):
 
 
 def fetch_dama(conn, day, universe):
+    """抓大摩(功能1)+ 追蹤名單(功能5)的分點資料。
+
+    FinMind 一次查詢會回傳「這檔股票這天所有分點」的明細,所以不管要追蹤
+    幾家分點,查詢次數都一樣(還是每檔股票查一次)——多追蹤 69 家不會多花
+    任何 API 額度,只是把同一份回應多篩幾個分點代碼出來存。
+    """
     n = 0
     for i, sid in enumerate(universe, 1):
         df = finmind_query("TaiwanStockTradingDailyReport", sid, day, day, quiet=True)
         if len(df) and "securities_trader_id" in df.columns:
-            dama = df[df["securities_trader_id"] == DAMA_TRADER_ID]
-            if len(dama):
+            watched = df[df["securities_trader_id"].isin(ALL_WATCHED_TRADER_IDS)]
+            if len(watched):
                 conn.executemany(
-                    "INSERT OR REPLACE INTO daily_dama VALUES (?,?,?,?,?)",
+                    "INSERT OR REPLACE INTO daily_dama VALUES (?,?,?,?,?,?)",
                     [
-                        (day, str(r.stock_id), r.price, r.buy, r.sell)
-                        for r in dama.itertuples()
+                        (day, str(r.stock_id), r.securities_trader_id, r.price, r.buy, r.sell)
+                        for r in watched.itertuples()
                     ],
                 )
                 conn.commit()
-                n += len(dama)
+                n += len(watched)
         if i % 50 == 0:
-            print(f"  大摩分點查詢進度 {i}/{len(universe)}")
+            print(f"  分點查詢進度 {i}/{len(universe)}")
         time.sleep(SLEEP)
-    print(f"  {day} 大摩分點資料 {n} 筆(掃了 {len(universe)} 檔)")
+    print(f"  {day} 追蹤分點資料 {n} 筆(掃了 {len(universe)} 檔,追蹤 {len(ALL_WATCHED_TRADER_IDS)} 個分點代碼)")
