@@ -118,6 +118,9 @@ SYSTEM_PROMPT = """\
 【總經要點】(最多5點)
 【本週待觀察事件】(法說、數據公布、營收公布日)
 
+只輸出上面這四個【】區塊,不要多寫任何其他區塊、註記、待辦清單或自我檢查紀錄
+(例如「刪除的候選」「未列入的新聞」這類內容一律不要出現在最終輸出裡)。
+
 # 七、資料來源優先順序
 優先:公司公告/法說簡報、公開資訊觀測站、TrendForce、DIGITIMES、Bloomberg、\
 Reuters、海外同業財報與電話會議逐字稿
@@ -236,7 +239,9 @@ def build(conn, report_date):
 
     print("  [功能3] 呼叫 Claude(web_search)分析中…")
     try:
-        analysis = call_claude(user_prompt, system=SYSTEM_PROMPT, web_search=True, max_searches=15)
+        analysis = call_claude(
+            user_prompt, system=SYSTEM_PROMPT, web_search=True, max_searches=15, max_tokens=32000
+        )
     except Exception as e:
         return [f"【今日產業與總經簡報】\n(呼叫 AI 分析失敗: {e})"]
 
