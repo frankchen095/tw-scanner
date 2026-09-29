@@ -24,20 +24,33 @@ DAMA_TRADER_ID = "1470"  # 台灣摩根士丹利(大摩)的分點代號,功能1�
 TRACKED_BROKERS_PATH = ROOT / "data" / "tracked_brokers.json"
 
 
-def load_tracked_brokers():
-    """回傳 (trader_id -> 營業處資訊 dict) 的對照表。找不到檔案就回傳空 dict。"""
+TOP_N_TRACKED_BROKERS = 40  # 功能5只用命中率前 N 名(tracked_brokers.json 已經照命中率高到低排序)
+
+
+def load_tracked_broker_groups():
+    """回傳 tracked_brokers.json 的原始清單(已照命中率由高到低排序)。找不到檔案就回傳空清單。"""
     if not TRACKED_BROKERS_PATH.exists():
-        return {}
-    groups = json.loads(TRACKED_BROKERS_PATH.read_text(encoding="utf-8"))
+        return []
+    return json.loads(TRACKED_BROKERS_PATH.read_text(encoding="utf-8"))
+
+
+def load_tracked_brokers():
+    """回傳 (trader_id -> 營業處資訊 dict) 的對照表。"""
     out = {}
-    for g in groups:
+    for g in TRACKED_BROKER_GROUPS:
         for tid in g["trader_ids"]:
             out[tid] = g
     return out
 
 
+TRACKED_BROKER_GROUPS = load_tracked_broker_groups()
 TRACKED_BROKERS = load_tracked_brokers()
 ALL_WATCHED_TRADER_IDS = {DAMA_TRADER_ID} | set(TRACKED_BROKERS)
+
+# 功能5專用:命中率前 40 名的分點代碼(fetch 階段還是抓全部 69 個分點,只有報表這裡篩前40)
+TOP40_TRADER_IDS = {
+    tid for g in TRACKED_BROKER_GROUPS[:TOP_N_TRACKED_BROKERS] for tid in g["trader_ids"]
+}
 
 
 def connect():
