@@ -10,7 +10,16 @@
    營業處(見 `data/tracked_brokers.json`,由 fenpoint 的 `scripts/08_export_tracked_brokers.py`
    產生)。把這40個分點「當天」和「近3天」買超同一檔股票的金額加總,列出合計買超前10名的股票
    (單日版 + 近3日版)。跟功能1(已停用)的查詢共用同一次 API 呼叫,不會多花額度。
-3. 整理當日總經/電子業重大新聞，用 AI 分析利多利空及受影響公司(需要另外申請 Anthropic API key)
+3. AI 零組件供應鏈 + 總經每日簡報：用 Google News RSS 廣泛掃描供應鏈各環節(晶片設計、
+   晶圓製造、記憶體、先進封裝測試、載板/PCB、光通訊網通、被動元件、伺服器機櫃、電源散熱、
+   資料中心基建)+ 總經新聞標題當候選,交給 Claude(`claude-opus-5`,開 web_search 工具自己
+   查證數字、找來源)依詳細評分規則(1-5分、只寫4-5分)做深度分析,十點格式(產業鏈定位、
+   受惠邏輯鏈、受惠個股與數字、反方觀點、信心標示⚠️📊✅等)。每天的簡報存進
+   `data/scanner.db` 的 `news_briefings` 表,隔天執行會先讀昨天的內容,避免炒冷飯。
+   完整規則寫在 `scripts/reports/feature3_news.py` 的 `SYSTEM_PROMPT`。
+   需要 `ANTHROPIC_API_KEY`(已設定)。單獨測試(不用等其他功能跑完、不送Telegram):
+   `python scripts/03_news_test.py`,或在 GitHub 網頁上手動觸發「測試-新聞分析」這個
+   workflow(`.github/workflows/test-news.yml`)。
 
 **已停用(程式碼還在,只是沒有推播):**
 - 大摩(台灣摩根士丹利)分點 + 投信/外資買賣超排行
@@ -25,6 +34,8 @@
 - [x] GitHub Actions 排程(.github/workflows/daily-scan.yml)
 - [x] 功能1~4 端對端測試通過,已上線
 - [x] 功能5(追蹤 fenpoint 回測出的高命中率分點)已建置,本機測試通過
+- [x] 功能3改版:完整供應鏈範圍+詳細評分/格式規則+web_search+每日簡報存檔避免重複,
+      呼叫方式從 raw HTTP 改成官方 anthropic SDK(見 requirements.txt)
 
 ## 資料夾
 

@@ -84,6 +84,10 @@ def connect():
         CREATE TABLE IF NOT EXISTS shares_outstanding (
             stock_id TEXT PRIMARY KEY, shares REAL, updated TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS news_briefings (
+            date TEXT PRIMARY KEY, content TEXT
+        );
         """
     )
     conn.commit()

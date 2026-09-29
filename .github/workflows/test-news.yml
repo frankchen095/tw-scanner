@@ -1,0 +1,21 @@
+name: 測試-新聞分析
+
+on:
+  workflow_dispatch: {}   # 只能手動觸發,不會自動排程
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: 只測功能3(新聞+AI分析),印在畫面上,不送Telegram不碰資料庫
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/03_news_test.py

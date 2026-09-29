@@ -5,7 +5,8 @@ common.py —— 共用工具
   - 讀取環境變數(FINMIND_TOKEN / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / ANTHROPIC_API_KEY)
   - 打 FinMind API,遇到額度限制自動等待重試
   - 送 Telegram 訊息(太長會自動分段)
-  - 呼叫 Claude API(功能3新聞分析用)
+  - 呼叫 Claude API(功能3新聞分析用,走官方 anthropic SDK,開了 web_search 工具讓
+    它自己查資料佐證數字、找來源連結,不是只憑新聞標題腦補)
 """
 
 import os
@@ -20,8 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
-CLAUDE_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_MODEL = "claude-opus-5"
 
 
 def get_env(name):
@@ -104,26 +104,37 @@ def send_telegram(text, parse_mode="HTML"):
         time.sleep(1)
 
 
-def call_claude(prompt, max_tokens=1500):
-    """呼叫 Claude API,回傳文字回覆。找不到 ANTHROPIC_API_KEY 或呼叫失敗會丟出例外(不會中斷整支程式)。"""
+def call_claude(prompt, system=None, max_tokens=16000, effort="high", web_search=False, max_searches=15):
+    """
+    呼叫 Claude API,回傳文字回覆(只取文字部分,忽略搜尋過程的區塊)。
+    找不到 ANTHROPIC_API_KEY 或呼叫失敗會丟出例外(不會中斷整支程式)。
+
+    web_search=True 會開啟 Claude 內建的網路搜尋工具(伺服器端執行,不用自己寫
+    查詢迴圈),讓它在回答前自己上網查資料佐證數字、找來源連結,不是只憑丟給它
+    的新聞標題腦補內容。用 streaming 呼叫,避免 max_tokens 設太大時 HTTP 逾時。
+    """
+    import anthropic  # 延遲載入,避免沒裝套件時整支程式一開始就掛掉
+
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("找不到環境變數 ANTHROPIC_API_KEY")
 
-    resp = requests.post(
-        CLAUDE_URL,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        json={
-            "model": CLAUDE_MODEL,
-            "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return "".join(block.get("text", "") for block in data.get("content", []))
+    client = anthropic.Anthropic(api_key=api_key, timeout=600.0)
+    kwargs = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": effort},
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        kwargs["system"] = system
+    if web_search:
+        kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches}]
+
+    with client.messages.stream(**kwargs) as stream:
+        response = stream.get_final_message()
+
+    if response.stop_reason == "refusal":
+        raise RuntimeError("Claude 拒絕回答這次請求(安全政策)")
+    return "".join(block.text for block in response.content if block.type == "text")
