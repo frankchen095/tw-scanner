@@ -16,7 +16,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import finmind_query  # noqa: E402
-from db import ALL_WATCHED_TRADER_IDS, prune  # noqa: E402
+from db import ALL_WATCHED_TRADER_IDS, buyback_brokers_by_stock, prune  # noqa: E402
+from geo import same_district_brokers  # noqa: E402
 from helpers import (  # noqa: E402
     BIG_MARKET_VALUE,
     get_market_values,
@@ -256,6 +257,31 @@ def fetch_month_revenue(conn, day, big_ids):
 # ---------- 整體流程 ----------
 
 
+def _extra_by_stock(conn, big):
+    """策略七需要額外存的分點:{stock_id: {trader_id}}(同區分點只含市值>500億的公司;庫藏股分點不限市值)。"""
+    out = {}
+    for sid, traders in same_district_brokers(conn).items():
+        if sid in big and traders:
+            out.setdefault(sid, set()).update(traders)
+    for sid, traders in buyback_brokers_by_stock().items():  # 庫藏股分點:不限市值
+        out.setdefault(sid, set()).update(traders)
+    return out
+
+
+def fetch_extra_only(conn, day):
+    """只補抓策略七(同區/庫藏股分點)涉及的股票的分點日報,不重抓行情、法人、營收。
+    用在『新增了要追蹤的分點後,補存過去幾天的資料』。"""
+    mv = get_market_values(conn, day)
+    if not mv:
+        print(f"  {day} 資料庫裡沒有市值,無法判斷範圍")
+        return False
+    big = {s for s, v in mv.items() if v > BIG_MARKET_VALUE}
+    extra = _extra_by_stock(conn, big)
+    print(f"=== 補抓 {day}:策略七涉及 {len(extra)} 檔 ===")
+    fetch_broker_reports(conn, day, sorted(extra), extra_by_stock=extra)
+    return True
+
+
 def do_fetch(conn, day):
     """抓某一天全部要用的資料。回傳 False 代表那天沒有行情(假日),不用往下做。"""
     print(f"=== 抓取 {day} 的資料 ===")
@@ -277,9 +303,16 @@ def do_fetch(conn, day):
         .tolist()
     )
     limit_up = {s: v for s, v in limit_up_candidates(price_df).items() if s in big}
-    extra = [s for s in limit_up if s not in set(universe)]
-    print(f"  漲停且市值>500億:{len(limit_up)} 檔(其中 {len(extra)} 檔不在成交金額前 {TOP_N_BY_TURNOVER},另外補查)")
-    fetch_broker_reports(conn, day, universe + extra, limit_up=limit_up)
+
+    # 策略七:同區分點(A)和庫藏股分點(B)也要存。公司不在成交金額前300名也要補查分點日報。
+    extra_by_stock = _extra_by_stock(conn, big)
+
+    in_universe = set(universe)
+    extra = [s for s in list(limit_up) + sorted(extra_by_stock) if s not in in_universe]
+    extra = list(dict.fromkeys(extra))
+    print(f"  漲停且市值>500億:{len(limit_up)} 檔;策略七地緣/庫藏股分點涉及 {len(extra_by_stock)} 檔;"
+          f"其中共 {len(extra)} 檔不在成交金額前 {TOP_N_BY_TURNOVER},另外補查分點日報")
+    fetch_broker_reports(conn, day, universe + extra, limit_up=limit_up, extra_by_stock=extra_by_stock)
 
     if big:
         fetch_month_revenue(conn, day, big)

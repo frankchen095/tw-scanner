@@ -52,6 +52,26 @@ TOP40_TRADER_IDS = {
     tid for g in TRACKED_BROKER_GROUPS[:TOP_N_TRACKED_BROKERS] for tid in g["trader_ids"]
 }
 
+# ---- 庫藏股分點名單(策略七 B) ----
+# 由 scripts/06_build_buyback_brokers.py 用 fenpoint 的分點歷史資料推算,見該檔說明。
+BUYBACK_BROKERS_PATH = ROOT / "data" / "buyback_brokers.json"
+
+
+def load_buyback_brokers():
+    """回傳 list[dict]:stock_id, trader_id, trader_name, start, end, error_pct …。沒有檔案就回傳空 list。"""
+    if not BUYBACK_BROKERS_PATH.exists():
+        return []
+    return json.loads(BUYBACK_BROKERS_PATH.read_text(encoding="utf-8"))
+
+
+def buyback_brokers_by_stock():
+    """{stock_id: {trader_id}}"""
+    out = {}
+    for e in load_buyback_brokers():
+        out.setdefault(str(e["stock_id"]), set()).add(str(e["trader_id"]))
+    return out
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_price (
     date TEXT, stock_id TEXT,
@@ -101,6 +121,23 @@ CREATE TABLE IF NOT EXISTS news_briefings (
     date TEXT PRIMARY KEY, content TEXT
 );
 
+-- 地緣分點(策略七 A):公司總部、券商分點的縣市 + 鄉鎮市區對照表,每月更新一次(見 geo.py)
+CREATE TABLE IF NOT EXISTS company_geo (
+    stock_id TEXT PRIMARY KEY, name TEXT, address TEXT, city TEXT, district TEXT, updated TEXT
+);
+CREATE TABLE IF NOT EXISTS broker_geo (
+    trader_id TEXT PRIMARY KEY, name TEXT, address TEXT, city TEXT, district TEXT,
+    is_foreign INTEGER, updated TEXT
+);
+
+-- 庫藏股買回計畫(公開資訊觀測站),用來標「庫藏股執行中」
+-- done_flag:Y = 已執行完畢(已買回股數才有值)、N = 執行中
+CREATE TABLE IF NOT EXISTS buyback_programs (
+    stock_id TEXT, board_date TEXT, start_date TEXT, end_date TEXT, planned_shares REAL,
+    bought_shares REAL, done_flag TEXT, market TEXT, updated TEXT,
+    PRIMARY KEY (stock_id, board_date, start_date, end_date)
+);
+
 -- 哪幾天的報表已經推播成功。晚到的排程或重複觸發看到今天已推過,就不會再推一次。
 CREATE TABLE IF NOT EXISTS pushed_reports (
     date TEXT PRIMARY KEY, sent_at TEXT, n_messages INTEGER
@@ -148,6 +185,19 @@ def _migrate(conn):
     if "is_common" not in cols:
         conn.execute("ALTER TABLE stock_info ADD COLUMN is_common INTEGER")
         conn.execute("UPDATE stock_info SET updated='1970-01-01'")
+
+    # 3b. 庫藏股計畫表:舊版(開發中)沒有 done_flag,整張重建(資料都是公開資訊重新抓,沒有損失)
+    if "done_flag" not in _columns(conn, "buyback_programs"):
+        conn.executescript(
+            """
+            DROP TABLE buyback_programs;
+            CREATE TABLE buyback_programs (
+                stock_id TEXT, board_date TEXT, start_date TEXT, end_date TEXT, planned_shares REAL,
+                bought_shares REAL, done_flag TEXT, market TEXT, updated TEXT,
+                PRIMARY KEY (stock_id, board_date, start_date, end_date)
+            );
+            """
+        )
 
     # 4. 股本快取有『集保表合計列被重複加總,股數變兩倍』的錯誤,清掉讓它重抓
     version = conn.execute("PRAGMA user_version").fetchone()[0]

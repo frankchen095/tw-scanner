@@ -25,6 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from context import Context  # noqa: E402
 from db import connect  # noqa: E402
 from fetchers import do_fetch  # noqa: E402
+from geo import refresh_geo  # noqa: E402
+from mops_buyback import refresh_programs  # noqa: E402
 from notify import pack, send_line  # noqa: E402
 from risk_tags import RiskTags  # noqa: E402
 
@@ -35,6 +37,7 @@ import s1_s5_highs  # noqa: E402
 import s2_brokers  # noqa: E402
 import s3_limit_up  # noqa: E402
 import s4_revenue  # noqa: E402
+import s7_geo_brokers  # noqa: E402
 import s8_s9_institutional  # noqa: E402
 
 DISCLAIMER = "以上為程式依公開資料自動整理的篩選結果,不是投資建議;歷史命中率不代表未來表現。"
@@ -62,6 +65,9 @@ def main():
         conn.close()
         return
 
+    geo_error = refresh_geo(conn)  # 公司/分點地址對照表,每月更新一次;失敗就沿用舊的
+    buyback_error = refresh_programs(conn)  # 庫藏股買回計畫(標『庫藏股執行中』用),每天更新一次
+
     if not args.no_fetch:
         if not do_fetch(conn, day):
             print(f"\n{day} 沒有行情資料(非交易日?),不推播。")
@@ -85,6 +91,7 @@ def main():
         ("策略二", s2_brokers),
         ("策略三", s3_limit_up),
         ("策略四", s4_revenue),
+        ("策略七", s7_geo_brokers),
         ("策略八/九", s8_s9_institutional),
     ]:
         try:
@@ -96,7 +103,7 @@ def main():
 
     sections = [f"台股盤後掃描 {day}"]
     sections.append(render(intersection.build(ctx, res)))
-    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s8_1", "s8_5", "s9_trust", "s9_foreign"):
+    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s7", "s8_1", "s8_5", "s9_trust", "s9_foreign"):
         if key in res:
             sections.append(render(res[key]))
 
@@ -109,6 +116,9 @@ def main():
             failures.append(f"策略六 執行失敗:{str(e)[:150]}")
 
     notes = []
+    for e in (geo_error, buyback_error):
+        if e:
+            risk.errors.append(e)
     if risk.errors:
         notes.append("風險標記資料來源今天有問題,以下標記可能缺漏:\n- " + "\n- ".join(risk.errors))
     if failures:
