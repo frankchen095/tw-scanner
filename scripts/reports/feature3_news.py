@@ -156,6 +156,21 @@ def _save_briefing(conn, report_date, content):
     conn.commit()
 
 
+def build_name_map(rows):
+    """rows = [(stock_id, name)]。除了完整名稱,也收『去掉結尾 * / -創 / -KY』的簡稱
+    (例如 國巨* → 國巨、世芯-KY → 世芯),但簡稱在名單裡必須是唯一的才用。"""
+    m = {name: sid for sid, name in rows}
+    alias = {}
+    for sid, name in rows:
+        a = re.sub(r"(\*|-創|-KY)$", "", name)
+        if a != name:
+            alias.setdefault(a, set()).add(sid)
+    for a, ids in alias.items():
+        if a not in m and len(ids) == 1:
+            m[a] = next(iter(ids))
+    return m
+
+
 def link_stocks(text, name_to_id):
     """把『個股:』那一行的公司名稱用股票名單核對:對得上補正確代號,對不上標 (?)。"""
 
@@ -225,7 +240,7 @@ def build(conn, report_date):
 
     if conn is not None:
         rows = conn.execute("SELECT stock_id, name FROM stock_info WHERE is_common=1").fetchall()
-        analysis = link_stocks(analysis, {name: sid for sid, name in rows})
+        analysis = link_stocks(analysis, build_name_map(rows))
 
     _save_briefing(conn, report_date, analysis)
 
