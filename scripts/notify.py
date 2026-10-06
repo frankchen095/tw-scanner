@@ -89,11 +89,28 @@ def send_line(bubbles):
     return sent
 
 
+def check_token(token):
+    """驗證 channel access token 有沒有效。回傳 (HTTP 狀態碼, 官方帳號名稱或錯誤訊息)。"""
+    try:
+        r = requests.get(
+            "https://api.line.me/v2/bot/info", headers={"Authorization": "Bearer " + token}, timeout=30
+        )
+    except requests.RequestException as e:
+        return None, f"連不上 LINE:{e}"
+    if r.status_code == 200:
+        return 200, r.json().get("displayName", "")
+    return r.status_code, r.text[:200]
+
+
 def line_quota():
     """回傳 (上限描述, 本月已用則數)。查不到就回傳 None。"""
     try:
-        q = requests.get(QUOTA_URL, headers=_headers(), timeout=30).json()
-        c = requests.get(CONSUMPTION_URL, headers=_headers(), timeout=30).json()
+        qr = requests.get(QUOTA_URL, headers=_headers(), timeout=30)
+        cr = requests.get(CONSUMPTION_URL, headers=_headers(), timeout=30)
+        if qr.status_code != 200 or cr.status_code != 200:
+            print(f"    查詢 LINE 額度失敗: HTTP {qr.status_code} / {cr.status_code}")
+            return None
+        q, c = qr.json(), cr.json()
         limit = "沒有上限" if q.get("type") == "none" else f"每月 {q.get('value')} 則"
         return limit, c.get("totalUsage")
     except Exception as e:  # noqa: BLE001

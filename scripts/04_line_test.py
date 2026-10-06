@@ -30,5 +30,5 @@ if not args.quota:
     sent = send_line(["台股盤後掃描:LINE 測試訊息。收到這則代表推播設定成功。"])
     print(f"已送出 {sent} 則,請到 LINE 看有沒有收到。")
     after = line_quota()
-    if after and before:
+    if after and before and after[1] is not None and before[1] is not None:
         print(f"送出後本月已用 {after[1]} 則(這次用了 {after[1] - before[1]} 則)")
