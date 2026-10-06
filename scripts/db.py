@@ -101,6 +101,11 @@ CREATE TABLE IF NOT EXISTS news_briefings (
     date TEXT PRIMARY KEY, content TEXT
 );
 
+-- 哪幾天的報表已經推播成功。晚到的排程或重複觸發看到今天已推過,就不會再推一次。
+CREATE TABLE IF NOT EXISTS pushed_reports (
+    date TEXT PRIMARY KEY, sent_at TEXT, n_messages INTEGER
+);
+
 -- 月營收(單位:元)。first_seen = 我們第一次看到這筆的日期,拿來判斷「當天新公布」。
 CREATE TABLE IF NOT EXISTS month_revenue (
     stock_id TEXT, revenue_year INTEGER, revenue_month INTEGER,

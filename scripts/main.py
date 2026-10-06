@@ -18,7 +18,7 @@ main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LIN
 import argparse
 import sys
 import traceback
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -50,10 +50,17 @@ def main():
     parser.add_argument("--no-fetch", action="store_true", help="跳過抓資料,直接用資料庫現有資料出報表")
     parser.add_argument("--dry-run", action="store_true", help="不推播,只印在畫面上")
     parser.add_argument("--no-news", action="store_true", help="跳過策略六(時事分析),測試時省時間")
+    parser.add_argument("--force", action="store_true", help="這天已經推播過也再推一次")
     args = parser.parse_args()
     day = args.date
 
     conn = connect()
+
+    already = conn.execute("SELECT sent_at FROM pushed_reports WHERE date=?", (day,)).fetchone()
+    if already and not args.dry_run and not args.force:
+        print(f"\n{day} 的報表已經在 {already[0]} 推播過了,不重複推播。(要重新推播請加 --force)")
+        conn.close()
+        return
 
     if not args.no_fetch:
         if not do_fetch(conn, day):
@@ -109,9 +116,8 @@ def main():
     notes.append(DISCLAIMER)
     sections.append("\n\n".join(notes))
 
-    conn.close()
-
     bubbles = pack(sections)
+    ok = True
     if args.dry_run:
         for s in sections:
             print("\n" + "=" * 60)
@@ -121,8 +127,18 @@ def main():
     else:
         sent = send_line(bubbles)
         print(f"\nLINE 已送出 {sent}/{len(bubbles)} 則訊息")
+        ok = sent == len(bubbles)
+        if ok:
+            conn.execute(
+                "INSERT OR REPLACE INTO pushed_reports VALUES (?,?,?)",
+                (day, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(bubbles)),
+            )
+            conn.commit()
 
-    print("\n完成。")
+    conn.close()
+    print("\n完成。" if ok else "\n推播沒有全部送出,請看上面的錯誤訊息。")
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

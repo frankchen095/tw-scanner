@@ -9,9 +9,18 @@ on:
         description: "只跑完整流程並印出結果,不推播 LINE"
         type: boolean
         default: false
+      force:
+        description: "這天的報表已經推播過了,還是要再推一次"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+# 同一時間只跑一個。晚到的排程如果看到今天已經推播過,會自己跳過,不會重複推播。
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
 
 jobs:
   scan:
@@ -32,7 +41,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python scripts/main.py ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python scripts/main.py ${{ inputs.dry_run && '--dry-run' || '' }} ${{ inputs.force && '--force' || '' }}
 
       # 就算推播失敗,當天抓到的資料也要存回 repo,不然隔天的「近5日」「連買天數」會斷掉
       - name: 把當天資料存回 repo
