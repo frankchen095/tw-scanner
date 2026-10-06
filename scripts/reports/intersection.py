@@ -4,7 +4,6 @@
 偏多策略的分類(同類只算一次):
   策略一            創新高策略(再漲3%內創60日新高)
   策略二            前40大分點『今日買超榜』(不含近3日版)
-  策略四            月營收有標示『創新高』的(創歷史新高 / 創N個月新高)
   策略五            今日創60日新高
   策略七            地緣分點買進(第二階段才有)
   法人              策略八、策略九合算一類(避免自己跟自己重複)
@@ -32,7 +31,6 @@ def categories(res):
     return {
         "策略一": picks("s1"),
         "策略二": picks("s2_buy"),
-        "策略四": picks("s4"),  # s4 的 picks 只含標示『新高』的
         "策略五": picks("s5"),
         "策略七": picks("s7"),
         "法人": picks("s8_1", "s8_5", "s9_trust", "s9_foreign"),
@@ -61,7 +59,7 @@ def build(ctx, res):
     if not lines:
         lines = ["今天沒有同時出現在兩類以上偏多策略的股票"]
 
-    missing = [k for k in ("s1", "s2_buy", "s4", "s5", "s8_1") if k not in res]
+    missing = [k for k in ("s1", "s2_buy", "s5", "s8_1") if k not in res]
     if missing:
         lines.append(f"(注意:策略 {', '.join(missing)} 今天沒有結果,交集榜可能不完整)")
     return result("intersection", TITLE, lines, [sid for sid, _ in rows])
