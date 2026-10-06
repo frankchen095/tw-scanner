@@ -42,7 +42,7 @@ def _dama_table(conn, report_date, n_days, valid_ids):
         return None
 
     df["net_shares"] = df["buy"] - df["sell"]
-    df["net_amount"] = df["net_shares"] * df["price"]
+    df["net_amount"] = df["buy_amt"] - df["sell_amt"]
     agg = (
         df.groupby("stock_id")
         .agg(net_shares=("net_shares", "sum"), net_amount=("net_amount", "sum"))

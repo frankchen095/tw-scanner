@@ -2,8 +2,13 @@ name: 台股盤後掃描
 
 on:
   schedule:
-    - cron: "17 11 * * 1-5"  # 台灣時間週一~週五 19:17(UTC 11:17),刻意避開整點,GitHub 整點排程常延遲數小時
-  workflow_dispatch: {}      # 允許在 GitHub 網頁上手動觸發,方便測試
+    - cron: "0 13 * * 1-5"   # 台灣時間週一~週五 21:00(UTC 13:00)。注意:GitHub 的排程常比設定時間晚幾小時才啟動
+  workflow_dispatch:         # 在 GitHub 網頁上手動觸發;dry_run 打勾 = 只跑完整流程、印在記錄裡,不推播
+    inputs:
+      dry_run:
+        description: "只跑完整流程並印出結果,不推播 LINE"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -11,6 +16,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +29,14 @@ jobs:
       - name: 執行盤後掃描
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/main.py
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python scripts/main.py ${{ inputs.dry_run && '--dry-run' || '' }}
 
+      # 就算推播失敗,當天抓到的資料也要存回 repo,不然隔天的「近5日」「連買天數」會斷掉
       - name: 把當天資料存回 repo
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

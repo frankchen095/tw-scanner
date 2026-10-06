@@ -17,14 +17,14 @@ DB_PATH.parent.mkdir(exist_ok=True)
 
 DAMA_TRADER_ID = "1470"  # 台灣摩根士丹利(大摩)的分點代號,功能1專用
 
-# ---- 功能5用的追蹤分點名單 ----
+# ---- 追蹤分點名單 ----
 # 由 fenpoint 專案(分點勝率工作台)回測產生,見 data/tracked_brokers.json 和
 # fenpoint/scripts/08_export_tracked_brokers.py。載不到就當作沒有追蹤名單
-# (功能5會顯示提示,不會讓整支程式當掉)。
+# (策略二會顯示提示,不會讓整支程式當掉)。
 TRACKED_BROKERS_PATH = ROOT / "data" / "tracked_brokers.json"
 
 
-TOP_N_TRACKED_BROKERS = 40  # 功能5只用命中率前 N 名(tracked_brokers.json 已經照命中率高到低排序)
+TOP_N_TRACKED_BROKERS = 40  # 策略二只用命中率前 N 名(tracked_brokers.json 已經照命中率高到低排序)
 
 
 def load_tracked_broker_groups():
@@ -47,73 +47,125 @@ TRACKED_BROKER_GROUPS = load_tracked_broker_groups()
 TRACKED_BROKERS = load_tracked_brokers()
 ALL_WATCHED_TRADER_IDS = {DAMA_TRADER_ID} | set(TRACKED_BROKERS)
 
-# 功能5專用:命中率前 40 名的分點代碼(fetch 階段還是抓全部 69 個分點,只有報表這裡篩前40)
+# 命中率前 40 名的分點代碼(抓資料階段還是存全部追蹤分點,只有報表這裡篩前40)
 TOP40_TRADER_IDS = {
     tid for g in TRACKED_BROKER_GROUPS[:TOP_N_TRACKED_BROKERS] for tid in g["trader_ids"]
 }
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS daily_price (
+    date TEXT, stock_id TEXT,
+    open REAL, high REAL, low REAL, close REAL,
+    volume REAL, money REAL, spread REAL,
+    PRIMARY KEY (date, stock_id)
+);
+CREATE INDEX IF NOT EXISTS ix_price_sd ON daily_price(stock_id, date);
 
-def connect():
-    conn = sqlite3.connect(DB_PATH)
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS daily_price (
-            date TEXT, stock_id TEXT,
-            open REAL, high REAL, low REAL, close REAL,
-            volume REAL, money REAL,
-            PRIMARY KEY (date, stock_id)
-        );
-        CREATE INDEX IF NOT EXISTS ix_price_sd ON daily_price(stock_id, date);
+CREATE TABLE IF NOT EXISTS daily_institutional (
+    date TEXT, stock_id TEXT, name TEXT, buy REAL, sell REAL,
+    PRIMARY KEY (date, stock_id, name)
+);
+CREATE INDEX IF NOT EXISTS ix_inst_sd ON daily_institutional(stock_id, date);
 
-        CREATE TABLE IF NOT EXISTS daily_institutional (
-            date TEXT, stock_id TEXT, name TEXT, buy REAL, sell REAL,
-            PRIMARY KEY (date, stock_id, name)
-        );
-        CREATE INDEX IF NOT EXISTS ix_inst_sd ON daily_institutional(stock_id, date);
+-- 分點日報:FinMind 原始資料是「每個分點每個價位一列」,這裡存的是『每個分點每檔股票
+-- 每天』加總後的結果(buy/sell 是股數,buy_amt/sell_amt 是各價位 股數×價格 加總的金額)。
+CREATE TABLE IF NOT EXISTS daily_dama (
+    date TEXT, stock_id TEXT, trader_id TEXT,
+    buy REAL, sell REAL, buy_amt REAL, sell_amt REAL,
+    PRIMARY KEY (date, stock_id, trader_id)
+);
+CREATE INDEX IF NOT EXISTS ix_dama_sd ON daily_dama(stock_id, date);
 
-        CREATE TABLE IF NOT EXISTS daily_dama (
-            date TEXT, stock_id TEXT, trader_id TEXT, price REAL, buy REAL, sell REAL,
-            PRIMARY KEY (date, stock_id, trader_id)
-        );
-        CREATE INDEX IF NOT EXISTS ix_dama_sd ON daily_dama(stock_id, date);
+-- 漲停價成交量(策略三):limit_price 當天漲停價,vol_at_limit 該價位所有分點買進股數加總
+CREATE TABLE IF NOT EXISTS daily_limitup (
+    date TEXT, stock_id TEXT, limit_price REAL, vol_at_limit REAL, total_vol REAL,
+    PRIMARY KEY (date, stock_id)
+);
 
-        CREATE TABLE IF NOT EXISTS stock_info (
-            stock_id TEXT PRIMARY KEY, name TEXT, industry TEXT, updated TEXT
-        );
+CREATE TABLE IF NOT EXISTS daily_market_value (
+    date TEXT, stock_id TEXT, market_value REAL,
+    PRIMARY KEY (date, stock_id)
+);
 
-        CREATE TABLE IF NOT EXISTS shares_outstanding (
-            stock_id TEXT PRIMARY KEY, shares REAL, updated TEXT
-        );
+-- is_common=1 代表「上市/上櫃普通股」(排除興櫃、ETF、ETN、權證、存託憑證、特別股)
+CREATE TABLE IF NOT EXISTS stock_info (
+    stock_id TEXT PRIMARY KEY, name TEXT, industry TEXT, updated TEXT,
+    type TEXT, is_common INTEGER
+);
 
-        CREATE TABLE IF NOT EXISTS news_briefings (
-            date TEXT PRIMARY KEY, content TEXT
-        );
-        """
-    )
-    conn.commit()
-    # 舊版 daily_dama 沒有 trader_id 欄位(只追蹤大摩一家);偵測到舊表就整個重建,
-    # 反正大摩分點資料本來就不回補歷史,重來也只是少個幾天份,幾天內會自動補齊。
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(daily_dama)")]
-    if "trader_id" not in cols:
+CREATE TABLE IF NOT EXISTS shares_outstanding (
+    stock_id TEXT PRIMARY KEY, shares REAL, updated TEXT
+);
+
+CREATE TABLE IF NOT EXISTS news_briefings (
+    date TEXT PRIMARY KEY, content TEXT
+);
+
+-- 月營收(單位:元)。first_seen = 我們第一次看到這筆的日期,拿來判斷「當天新公布」。
+CREATE TABLE IF NOT EXISTS month_revenue (
+    stock_id TEXT, revenue_year INTEGER, revenue_month INTEGER,
+    revenue REAL, create_time TEXT, first_seen TEXT,
+    PRIMARY KEY (stock_id, revenue_year, revenue_month)
+);
+"""
+
+
+def _columns(conn, table):
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def _migrate(conn):
+    """升級舊版資料庫。每一步都可以重複執行,不會重複破壞資料。"""
+    # 1. 舊版 daily_dama 把「同分點不同價位」的多列用主鍵蓋掉,只剩最後一個價位,
+    #    金額嚴重少算。資料本來就是錯的,整張表重建,之後每天自動累積。
+    if "buy_amt" not in _columns(conn, "daily_dama"):
         conn.executescript("DROP TABLE daily_dama;")
         conn.executescript(
             """
             CREATE TABLE daily_dama (
-                date TEXT, stock_id TEXT, trader_id TEXT, price REAL, buy REAL, sell REAL,
+                date TEXT, stock_id TEXT, trader_id TEXT,
+                buy REAL, sell REAL, buy_amt REAL, sell_amt REAL,
                 PRIMARY KEY (date, stock_id, trader_id)
             );
             CREATE INDEX IF NOT EXISTS ix_dama_sd ON daily_dama(stock_id, date);
             """
         )
-        conn.commit()
-        print("  (偵測到舊版 daily_dama 表格,已升級成可追蹤多個分點的新格式)")
+        print("  (daily_dama 已升級成『每分點每股每天加總』的新格式,舊資料因為有價位覆蓋的錯誤,已清除)")
+
+    # 2. daily_price 新增 spread(漲跌價差,算漲停價的參考價用)
+    if "spread" not in _columns(conn, "daily_price"):
+        conn.execute("ALTER TABLE daily_price ADD COLUMN spread REAL")
+
+    # 3. stock_info 新增 type / is_common,並強迫下次重新抓一次股票基本資料
+    cols = _columns(conn, "stock_info")
+    if "type" not in cols:
+        conn.execute("ALTER TABLE stock_info ADD COLUMN type TEXT")
+    if "is_common" not in cols:
+        conn.execute("ALTER TABLE stock_info ADD COLUMN is_common INTEGER")
+        conn.execute("UPDATE stock_info SET updated='1970-01-01'")
+
+    # 4. 股本快取有『集保表合計列被重複加總,股數變兩倍』的錯誤,清掉讓它重抓
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < 1:
+        conn.execute("DELETE FROM shares_outstanding")
+        conn.execute("PRAGMA user_version = 1")
+
+    conn.commit()
+
+
+def connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
 
 
 KEEP_DAYS = {
-    "daily_price": 30,  # 功能4「近20日」要用,「近100日高低點」改成即時查還原股價,不用本地存
-    "daily_institutional": 15,  # 最多只需要近5日,留15天當緩衝
+    "daily_price": 30,  # 「近20日」、成交金額比例要用;60日高低點改用還原股價即時查詢,不存這裡
+    "daily_institutional": 30,  # 法人連續買超最多往回看30個交易日
     "daily_dama": 15,
+    "daily_limitup": 30,
+    "daily_market_value": 10,
 }
 
 

@@ -1,98 +1,126 @@
 """
-main.py —— 主程式:抓資料 → 產生報表 → 推播 Telegram
+main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LINE 推播
 
-目前推播的內容只有:
-    功能4:帶量突破盤整
-    功能5:追蹤名單前40大分點,合計買超個股排行(單日 + 近3日)
-    功能3:新聞事件 AI 分析
+推播順序:交集榜 → 策略一~五 → 策略八、九 → 策略六(時事分析)
+(策略七地緣分點在第二階段加入;成效追蹤在第三階段加入,只在每週五推播)
 
-功能1(大摩分點+投信外資排行)、功能2(外資投信同買)已經停用、不再推播,
-程式檔案還在 scripts/reports/,之後想恢復可以參考舊版 main.py(git log 看得到)
-把兩行 import 和對應 blocks 加回來就好,資料抓取(fetch_institutional)還是照跑,
-沒有停,只是沒人在用那份資料而已。
-
-功能3(新聞+AI分析)需要環境變數 ANTHROPIC_API_KEY,沒設定的話該區塊會顯示提示,
-不會讓整支程式當掉。
+舊的 功能1(大摩+法人排行)、功能2(外資投信同買)、功能4(帶量突破盤整)已停用,
+程式檔案還留在 scripts/reports/,沒有被呼叫。
 
 用法:
-    python scripts/main.py                       # 用今天日期跑,抓資料+送Telegram
-    python scripts/main.py --date 2024-01-05      # 指定日期(測試用)
-    python scripts/main.py --date 2024-01-05 --no-fetch   # 跳過抓資料,只用資料庫現有資料出報表
-    python scripts/main.py --date 2024-01-05 --dry-run    # 不送Telegram,只印在畫面上看結果
+    python scripts/main.py                       # 用今天日期跑,抓資料 + 推播 LINE
+    python scripts/main.py --date 2026-10-06      # 指定日期(補跑、測試用)
+    python scripts/main.py --date 2026-10-06 --no-fetch   # 跳過抓資料,只用資料庫現有資料出報表
+    python scripts/main.py --date 2026-10-06 --dry-run    # 不推播,只印在畫面上看結果
+    python scripts/main.py --dry-run --no-news            # 跳過策略六(不需要 ANTHROPIC_API_KEY)
 """
 
 import argparse
-import html
 import sys
+import traceback
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import send_telegram  # noqa: E402
-from db import connect, prune  # noqa: E402
-from fetchers import fetch_price, fetch_institutional, fetch_dama  # noqa: E402
+from context import Context  # noqa: E402
+from db import connect  # noqa: E402
+from fetchers import do_fetch  # noqa: E402
+from notify import pack, send_line  # noqa: E402
+from risk_tags import RiskTags  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "reports"))
-import feature3_news as feature3  # noqa: E402
-import feature4_breakout as feature4  # noqa: E402
-import feature5_tracked_brokers as feature5  # noqa: E402
+import feature3_news as s6_news  # noqa: E402
+import intersection  # noqa: E402
+import s1_s5_highs  # noqa: E402
+import s2_brokers  # noqa: E402
+import s3_limit_up  # noqa: E402
+import s4_revenue  # noqa: E402
+import s8_s9_institutional  # noqa: E402
 
-TOP_N_FOR_DAMA = 300
+DISCLAIMER = "以上為程式依公開資料自動整理的篩選結果,不是投資建議;歷史命中率不代表未來表現。"
 
 
-def do_fetch(conn, day):
-    print(f"=== 抓取 {day} 的資料 ===")
-    price_df = fetch_price(conn, day)
-    fetch_institutional(conn, day)
-    if price_df is not None and len(price_df):
-        universe = (
-            price_df.sort_values("Trading_money", ascending=False)
-            .head(TOP_N_FOR_DAMA)["stock_id"]
-            .astype(str)
-            .tolist()
-        )
-        fetch_dama(conn, day, universe)
-    prune(conn)
+def render(r):
+    return r["title"] + "\n" + "\n".join(r["lines"])
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", default=date.today().strftime("%Y-%m-%d"))
     parser.add_argument("--no-fetch", action="store_true", help="跳過抓資料,直接用資料庫現有資料出報表")
-    parser.add_argument("--dry-run", action="store_true", help="不送Telegram,只印在畫面上")
+    parser.add_argument("--dry-run", action="store_true", help="不推播,只印在畫面上")
+    parser.add_argument("--no-news", action="store_true", help="跳過策略六(時事分析),測試時省時間")
     args = parser.parse_args()
     day = args.date
 
     conn = connect()
 
     if not args.no_fetch:
-        do_fetch(conn, day)
+        if not do_fetch(conn, day):
+            print(f"\n{day} 沒有行情資料(非交易日?),不推播。")
+            return
+    elif not conn.execute("SELECT 1 FROM daily_price WHERE date=? LIMIT 1", (day,)).fetchone():
+        print(f"\n資料庫裡沒有 {day} 的行情,不產生報表。")
+        return
 
-    print(f"\n=== 產生 {day} 的報表 ===")
-    blocks = []
-    blocks.append(("header", f"台股盤後掃描 {day}"))
-    blocks.append(("header", f"帶量突破盤整({day})"))
-    blocks += [("body", s) for s in feature4.build(conn, day)]
-    blocks.append(("header", f"追蹤分點合計買超排行({day})"))
-    blocks += [("body", s) for s in feature5.build(conn, day)]
-    blocks.append(("header", f"新聞事件分析({day})"))
-    blocks += [("prose", s) for s in feature3.build(conn, day)]
+    print(f"\n=== 載入風險標記資料(處置/注意/除權息/法說/融券) ===")
+    risk = RiskTags(day)
+    print(
+        f"  處置 {len(risk.disposition)} 檔、注意 {len(risk.attention)} 檔、"
+        f"未來5日除權息 {len(risk.exdiv)} 檔、未來5日法說 {len(risk.law_conf)} 檔、融券限制 {len(risk.short_status)} 檔"
+    )
+    ctx = Context(conn, day, risk)
+
+    print(f"\n=== 計算 {day} 的各策略 ===")
+    res, failures = {}, []
+    for name, mod in [
+        ("策略一/五", s1_s5_highs),
+        ("策略二", s2_brokers),
+        ("策略三", s3_limit_up),
+        ("策略四", s4_revenue),
+        ("策略八/九", s8_s9_institutional),
+    ]:
+        try:
+            print(f"  {name}…")
+            res.update(mod.build(ctx))
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            failures.append(f"{name} 執行失敗:{str(e)[:150]}")
+
+    sections = [f"台股盤後掃描 {day}"]
+    sections.append(render(intersection.build(ctx, res)))
+    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s8_1", "s8_5", "s9_trust", "s9_foreign"):
+        if key in res:
+            sections.append(render(res[key]))
+
+    if not args.no_news:
+        print("  策略六(時事分析)…")
+        try:
+            sections += s6_news.build(conn, day)
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            failures.append(f"策略六 執行失敗:{str(e)[:150]}")
+
+    notes = []
+    if risk.errors:
+        notes.append("風險標記資料來源今天有問題,以下標記可能缺漏:\n- " + "\n- ".join(risk.errors))
+    if failures:
+        notes.append("今天執行失敗的策略:\n- " + "\n- ".join(failures))
+    notes.append(DISCLAIMER)
+    sections.append("\n\n".join(notes))
 
     conn.close()
 
-    for kind, text in blocks:
-        escaped = html.escape(text)
-        if kind == "header":
-            msg = f"<b>{escaped}</b>"
-        elif kind == "prose":
-            msg = escaped
-        else:
-            msg = f"<pre>{escaped}</pre>"
-        if args.dry_run:
+    bubbles = pack(sections)
+    if args.dry_run:
+        for s in sections:
             print("\n" + "=" * 60)
-            print(text)
-        else:
-            send_telegram(msg)
+            print(s)
+        print("\n" + "=" * 60)
+        print(f"(合併後共 {len(bubbles)} 則 LINE 訊息,字數 {[len(b) for b in bubbles]})")
+    else:
+        sent = send_line(bubbles)
+        print(f"\nLINE 已送出 {sent}/{len(bubbles)} 則訊息")
 
     print("\n完成。")
 
