@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from helpers import BIG_MARKET_VALUE, get_market_values, get_stock_info  # noqa: E402
+from helpers import BIG_MARKET_VALUE, get_market_values_latest, get_stock_info  # noqa: E402
 
 NO_MV = "今日無資料(FinMind 市值表沒抓到,無法套用『市值>500億』條件)"
 
@@ -18,7 +18,12 @@ class Context:
         self.conn = conn
         self.day = day
         self.risk = risk
-        self.mv = get_market_values(conn, day)
+        self.mv, self.mv_date = get_market_values_latest(conn, day)
+        self.mv_note = (
+            f"市值門檻(>500億)用的是 {self.mv_date} 的市值表(FinMind 今天的市值表還沒更新)"
+            if self.mv and self.mv_date != day
+            else None
+        )
         self.big = {s for s, v in self.mv.items() if v > BIG_MARKET_VALUE} if self.mv else None
         self._names = {sid: v[0] for sid, v in get_stock_info(conn).items()}
 

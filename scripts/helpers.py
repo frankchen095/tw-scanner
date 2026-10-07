@@ -116,6 +116,18 @@ def get_market_values(conn, day):
     return {r[0]: r[1] for r in rows}
 
 
+def get_market_values_latest(conn, day, max_back_days=7):
+    """回傳 ({stock_id: 市值}, 實際用的日期)。FinMind 的市值表比股價、法人晚更新(21:25 還沒有),
+    當天沒有就用前一個交易日的(使用者決定的:這樣比較快);往前 max_back_days 天內都沒有才回傳 (None, None)。"""
+    lo = (date.fromisoformat(day) - timedelta(days=max_back_days)).isoformat()
+    row = conn.execute(
+        "SELECT MAX(date) FROM daily_market_value WHERE date <= ? AND date >= ?", (day, lo)
+    ).fetchone()
+    if not row or not row[0]:
+        return None, None
+    return get_market_values(conn, row[0]), row[0]
+
+
 # ---------- 還原股價 ----------
 
 _ADJ_CACHE = {}

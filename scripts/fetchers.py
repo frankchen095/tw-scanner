@@ -21,7 +21,7 @@ from db import ALL_WATCHED_TRADER_IDS, buyback_brokers_by_stock, prune  # noqa: 
 from geo import same_district_brokers  # noqa: E402
 from helpers import (  # noqa: E402
     BIG_MARKET_VALUE,
-    get_market_values,
+    get_market_values_latest,
     get_valid_stock_ids,
     limit_up_price,
     parallel_map,
@@ -71,21 +71,6 @@ def fetch_market_value(conn, day):
     conn.commit()
     print(f"  {day} 市值 {len(df)} 筆")
     return True
-
-
-def wait_for_market_value(conn, day, max_wait_min, interval_sec=300):
-    """FinMind 的市值表比股價、法人、分點日報晚更新(2026-10-07 實測 21:25 還沒有)。
-    沒到就每 5 分鐘重抓一次,最多等 max_wait_min 分鐘。回傳最後有沒有抓到。"""
-    start = time.time()
-    while True:
-        waited = (time.time() - start) / 60
-        if waited >= max_wait_min:
-            print(f"  等了 {waited:.0f} 分鐘,市值表還是沒更新,放棄等待", flush=True)
-            return False
-        print(f"  市值表還沒更新,5 分鐘後再試(已等 {waited:.0f} 分鐘)…", flush=True)
-        time.sleep(interval_sec)
-        if fetch_market_value(conn, day):
-            return True
 
 
 def fetch_institutional(conn, day):
@@ -287,7 +272,7 @@ def _extra_by_stock(conn, big):
 def fetch_extra_only(conn, day):
     """只補抓策略七(同區/庫藏股分點)涉及的股票的分點日報,不重抓行情、法人、營收。
     用在『新增了要追蹤的分點後,補存過去幾天的資料』。"""
-    mv = get_market_values(conn, day)
+    mv, _ = get_market_values_latest(conn, day)
     if not mv:
         print(f"  {day} 資料庫裡沒有市值,無法判斷範圍")
         return False
@@ -298,23 +283,22 @@ def fetch_extra_only(conn, day):
     return True
 
 
-def do_fetch(conn, day, wait_min=0):
+def do_fetch(conn, day):
     """抓某一天全部要用的資料。回傳 False 代表那天沒有行情(假日),不用往下做。
-    wait_min:市值表還沒更新時最多等幾分鐘(0 = 不等)。市值決定後面要查哪些股票的分點日報,
-    所以要在查分點日報之前等到。"""
+    市值門檻決定後面要查哪些股票的分點日報;當天的市值表還沒更新就用前一個交易日的。"""
     print(f"=== 抓取 {day} 的資料 ===")
     price_df = fetch_price(conn, day)
     if price_df is None or len(price_df) == 0:
         return False
 
-    mv_ok = fetch_market_value(conn, day)
+    fetch_market_value(conn, day)  # 當天的市值表常常還沒更新,沒有就用前一個交易日的
     fetch_institutional(conn, day)
-    if not mv_ok and wait_min > 0:
-        wait_for_market_value(conn, day, wait_min)
 
-    mv = get_market_values(conn, day)
+    mv, mv_date = get_market_values_latest(conn, day)
     big = {s for s, v in mv.items() if v > BIG_MARKET_VALUE} if mv else set()
-    print(f"  市值 > 500 億的普通股:{len(big)} 檔" if mv else "  (今天沒有市值資料,市值門檻的策略會顯示今日無資料)")
+    if mv and mv_date != day:
+        print(f"  今天的市值表還沒更新,市值門檻用 {mv_date} 的市值表")
+    print(f"  市值 > 500 億的普通股:{len(big)} 檔" if mv else "  (完全沒有市值資料,市值門檻的策略會顯示今日無資料)")
 
     universe = (
         price_df.sort_values("Trading_money", ascending=False)
