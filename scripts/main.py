@@ -54,6 +54,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="不推播,只印在畫面上")
     parser.add_argument("--no-news", action="store_true", help="跳過策略六(時事分析),測試時省時間")
     parser.add_argument("--force", action="store_true", help="這天已經推播過也再推一次")
+    parser.add_argument("--max-wait-min", type=int, default=150, help="FinMind 市值表還沒更新時最多等幾分鐘(預設 150;dry-run 不等)")
     args = parser.parse_args()
     day = args.date
 
@@ -69,7 +70,7 @@ def main():
     buyback_error = refresh_programs(conn)  # 庫藏股買回計畫(標『庫藏股執行中』用),每天更新一次
 
     if not args.no_fetch:
-        if not do_fetch(conn, day):
+        if not do_fetch(conn, day, wait_min=0 if args.dry_run else args.max_wait_min):
             print(f"\n{day} 沒有行情資料(非交易日?),不推播。")
             return
     elif not conn.execute("SELECT 1 FROM daily_price WHERE date=? LIMIT 1", (day,)).fetchone():
@@ -83,6 +84,10 @@ def main():
         f"未來5日除權息 {len(risk.exdiv)} 檔、未來5日法說 {len(risk.law_conf)} 檔、融券限制 {len(risk.short_status)} 檔"
     )
     ctx = Context(conn, day, risk)
+    missing_note = None
+    if ctx.big is None:
+        missing_note = ("FinMind 的市值表今天一直沒有更新(其他資料都有),所以需要『市值>500億』條件的策略"
+                        "(策略一、三、四、五、七同區、八、九)今天沒有結果,等資料更新後可以手動補推")
 
     print(f"\n=== 計算 {day} 的各策略 ===")
     res, failures = {}, []
@@ -121,6 +126,8 @@ def main():
             risk.errors.append(e)
     if risk.errors:
         notes.append("風險標記資料來源今天有問題,以下標記可能缺漏:\n- " + "\n- ".join(risk.errors))
+    if missing_note:
+        failures.insert(0, missing_note)
     if failures:
         notes.append("今天執行失敗的策略:\n- " + "\n- ".join(failures))
     notes.append(DISCLAIMER)

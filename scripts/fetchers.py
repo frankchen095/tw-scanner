@@ -8,6 +8,7 @@ fetchers.py —— 抓資料的共用函式,每天收盤後由 main.py / 02_fetc
 """
 
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
@@ -70,6 +71,21 @@ def fetch_market_value(conn, day):
     conn.commit()
     print(f"  {day} 市值 {len(df)} 筆")
     return True
+
+
+def wait_for_market_value(conn, day, max_wait_min, interval_sec=300):
+    """FinMind 的市值表比股價、法人、分點日報晚更新(2026-10-07 實測 21:25 還沒有)。
+    沒到就每 5 分鐘重抓一次,最多等 max_wait_min 分鐘。回傳最後有沒有抓到。"""
+    start = time.time()
+    while True:
+        waited = (time.time() - start) / 60
+        if waited >= max_wait_min:
+            print(f"  等了 {waited:.0f} 分鐘,市值表還是沒更新,放棄等待", flush=True)
+            return False
+        print(f"  市值表還沒更新,5 分鐘後再試(已等 {waited:.0f} 分鐘)…", flush=True)
+        time.sleep(interval_sec)
+        if fetch_market_value(conn, day):
+            return True
 
 
 def fetch_institutional(conn, day):
@@ -282,15 +298,19 @@ def fetch_extra_only(conn, day):
     return True
 
 
-def do_fetch(conn, day):
-    """抓某一天全部要用的資料。回傳 False 代表那天沒有行情(假日),不用往下做。"""
+def do_fetch(conn, day, wait_min=0):
+    """抓某一天全部要用的資料。回傳 False 代表那天沒有行情(假日),不用往下做。
+    wait_min:市值表還沒更新時最多等幾分鐘(0 = 不等)。市值決定後面要查哪些股票的分點日報,
+    所以要在查分點日報之前等到。"""
     print(f"=== 抓取 {day} 的資料 ===")
     price_df = fetch_price(conn, day)
     if price_df is None or len(price_df) == 0:
         return False
 
-    fetch_market_value(conn, day)
+    mv_ok = fetch_market_value(conn, day)
     fetch_institutional(conn, day)
+    if not mv_ok and wait_min > 0:
+        wait_for_market_value(conn, day, wait_min)
 
     mv = get_market_values(conn, day)
     big = {s for s, v in mv.items() if v > BIG_MARKET_VALUE} if mv else set()

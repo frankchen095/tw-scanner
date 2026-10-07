@@ -25,7 +25,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240  # 市值表常比其他資料晚更新,程式最多會等 150 分鐘
     steps:
       - uses: actions/checkout@v4
 
