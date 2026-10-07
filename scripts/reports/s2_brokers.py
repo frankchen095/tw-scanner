@@ -50,7 +50,7 @@ def _by_stock(conn, dates):
 
 def _lines(ctx, df, side):
     if df is None or df.empty:
-        return [], []
+        return [], [], []
     if side == "buy":
         d = df[df["net"] > 0].sort_values("net", ascending=False).head(TOP_N)
         fmt = lambda r: f"{fmt_wan(r.net, signed=True)} ({r.n_buy}組買超)"  # noqa: E731
@@ -58,7 +58,8 @@ def _lines(ctx, df, side):
         d = df[df["net"] < 0].sort_values("net").head(TOP_N)
         fmt = lambda r: f"{fmt_wan(r.net, signed=True)} ({r.n_sell}組賣超)"  # noqa: E731
     lines = [f"{i}. {ctx.label(r.stock_id)} {fmt(r)}" for i, r in enumerate(d.itertuples(), 1)]
-    return lines, d["stock_id"].tolist()
+    rows = [{"sid": r.stock_id, "net": float(r.net), "n": int(r.n_buy if side == "buy" else r.n_sell)} for r in d.itertuples()]
+    return lines, d["stock_id"].tolist(), rows
 
 
 def build(ctx):
@@ -75,15 +76,15 @@ def build(ctx):
     today = _by_stock(ctx.conn, d1)
     three = _by_stock(ctx.conn, d3)
 
-    buy_lines, buy_picks = _lines(ctx, today, "buy")
-    sell_lines, sell_picks = _lines(ctx, today, "sell")
-    buy3_lines, buy3_picks = _lines(ctx, three, "buy")
+    buy_lines, buy_picks, buy_rows = _lines(ctx, today, "buy")
+    sell_lines, sell_picks, sell_rows = _lines(ctx, today, "sell")
+    buy3_lines, buy3_picks, buy3_rows = _lines(ctx, three, "buy")
 
     note3 = f"(資料庫只有 {len(d3)} 個交易日的分點資料,近3日版不足3天)" if len(d3) < 3 else None
     if note3:
         buy3_lines.append(note3)
     return {
-        "s2_buy": result("s2_buy", T_BUY, buy_lines or ["今天沒有合計買超的股票"], buy_picks),
-        "s2_sell": result("s2_sell", T_SELL, sell_lines or ["今天沒有合計賣超的股票"], sell_picks),
-        "s2_buy3": result("s2_buy3", T_BUY3, buy3_lines or ["沒有合計買超的股票"], buy3_picks),
+        "s2_buy": result("s2_buy", T_BUY, buy_lines or ["今天沒有合計買超的股票"], buy_picks, rows=buy_rows),
+        "s2_sell": result("s2_sell", T_SELL, sell_lines or ["今天沒有合計賣超的股票"], sell_picks, rows=sell_rows),
+        "s2_buy3": result("s2_buy3", T_BUY3, buy3_lines or ["沒有合計買超的股票"], buy3_picks, rows=buy3_rows),
     }

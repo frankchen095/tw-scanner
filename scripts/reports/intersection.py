@@ -51,9 +51,10 @@ def build(ctx, res):
             multi[sid] = hit
 
     rows = sorted(multi.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-    lines = []
+    lines, out_rows = [], []
     for i, (sid, hit) in enumerate(rows, 1):
         conflicts = [n for n, ids in conflict_src.items() if sid in ids]
+        out_rows.append({"sid": sid, "cats": hit, "conflicts": conflicts})
         warn = f" ⚠訊號衝突:同時在{'、'.join(conflicts)}" if conflicts else ""
         lines.append(f"{i}. {ctx.label(sid)} {'+'.join(hit)}{warn}")
     if not lines:
@@ -62,4 +63,4 @@ def build(ctx, res):
     missing = [k for k in ("s1", "s2_buy", "s5", "s8_1") if k not in res]
     if missing:
         lines.append(f"(注意:策略 {', '.join(missing)} 今天沒有結果,交集榜可能不完整)")
-    return result("intersection", TITLE, lines, [sid for sid, _ in rows])
+    return result("intersection", TITLE, lines, [sid for sid, _ in rows], rows=out_rows)

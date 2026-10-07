@@ -41,9 +41,11 @@ def build(ctx):
     df["ratio"] = df["vol_at_limit"] / df["total_vol"]
     hit = df[df["ratio"] > THRESHOLD].sort_values("ratio", ascending=False)
 
-    lines = []
+    lines, rows = [], []
     for i, r in enumerate(hit.itertuples(), 1):
         short = ctx.risk.short_label(r.stock_id) if ctx.risk else "放空資訊今日無資料"
+        rows.append({"sid": r.stock_id, "limit_price": float(r.limit_price), "ratio": float(r.ratio),
+                     "vol": float(r.vol_at_limit), "total": float(r.total_vol), "short": short})
         lines.append(
             f"{i}. {ctx.label(r.stock_id)} 漲停價{r.limit_price:,.2f} "
             f"漲停價成交占比{r.ratio * 100:.1f}%({r.vol_at_limit / 1000:,.0f}張/{r.total_vol / 1000:,.0f}張) "
@@ -52,4 +54,4 @@ def build(ctx):
     n_limit = len(df)
     if not lines:
         lines = [f"今天沒有符合條件的股票(漲停且市值>500億共 {n_limit} 檔,成交占比都不到30%)"]
-    return {"s3": result("s3", TITLE, lines, hit["stock_id"].tolist())}
+    return {"s3": result("s3", TITLE, lines, hit["stock_id"].tolist(), rows=rows, n_limit=n_limit)}

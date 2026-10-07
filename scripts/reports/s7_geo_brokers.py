@@ -62,16 +62,18 @@ def _lines(ctx, kind, targets, df, d1, d5, names, geo_loc, running):
         rows.append((max(net_day, net_5), sid, net_day, net_5, [names.get(t, t) for t in top]))
     rows.sort(key=lambda x: -x[0])
 
-    out = []
+    out, out_rows = [], []
     for _, sid, nd, n5, tops in rows:
         city, dist = geo_loc.get(sid, (None, None))
         loc = f"({city or ''}{dist or ''})" if (city or dist) else ""
         tag = f"〔庫藏股執行中〕" if kind == "庫藏股" and sid in running else f"〔{kind}〕"
+        out_rows.append({"sid": sid, "kind": "庫藏股執行中" if "執行中" in tag else kind, "loc": f"{city or ''}{dist or ''}",
+                         "nd": nd, "n5": n5, "tops": tops})
         out.append(
             f"{ctx.name(sid)}({sid}){loc}{ctx.risk.tags(sid) if ctx.risk else ''}{tag}"
             f"單日 {fmt_wan(nd)} / 5日 {fmt_wan(n5)},主要買超分點:{'、'.join(tops) or '無'}"
         )
-    return out, [r[1] for r in rows]
+    return out, [r[1] for r in rows], out_rows
 
 
 def build(ctx):
@@ -99,8 +101,8 @@ def build(ctx):
         )
     }
 
-    lines_a, picks_a = _lines(ctx, "同區", geo, df, ctx.day, d5, names, geo_loc, running)
-    lines_b, picks_b = _lines(ctx, "庫藏股", bb, df, ctx.day, d5, names, geo_loc, running)
+    lines_a, picks_a, rows_a = _lines(ctx, "同區", geo, df, ctx.day, d5, names, geo_loc, running)
+    lines_b, picks_b, rows_b = _lines(ctx, "庫藏股", bb, df, ctx.day, d5, names, geo_loc, running)
 
     lines = lines_a + lines_b
     if not lines:
@@ -122,4 +124,4 @@ def build(ctx):
         more = f"…等{len(unparsed)}家" if len(unparsed) > 12 else f"共{len(unparsed)}家"
         lines.append(f"(地址沒寫區或無法判斷縣市,無法做同區比對:{names_txt}{more};完整名單在 data/geo_unparsed.txt)")
 
-    return {"s7": result("s7", TITLE, lines, list(dict.fromkeys(picks_a + picks_b)))}
+    return {"s7": result("s7", TITLE, lines, list(dict.fromkeys(picks_a + picks_b)), rows=rows_a + rows_b)}

@@ -301,6 +301,21 @@ class RiskTags:
             out.append(f"〔法說 {d.month}/{d.day}〕")
         return "".join(out)
 
+    def tag_list(self, sid):
+        """給 PDF 報表用:[(種類, 文字)],種類是 處置 / 注意 / 除權息 / 法說。"""
+        out = []
+        if sid in self.disposition:
+            out.append(("處置", "處置"))
+        if sid in self.attention:
+            out.append(("注意", "注意"))
+        if sid in self.exdiv:
+            d = self.exdiv[sid]
+            out.append(("除權息", f"除權息 {d.month}/{d.day}"))
+        if sid in self.law_conf:
+            d = self.law_conf[sid]
+            out.append(("法說", f"法說 {d.month}/{d.day}"))
+        return out
+
     def short_label(self, sid):
         """策略三用:這檔能不能融券放空。"""
         if not self.short_loaded:

@@ -138,6 +138,18 @@ CREATE TABLE IF NOT EXISTS buyback_programs (
     PRIMARY KEY (stock_id, board_date, start_date, end_date)
 );
 
+-- 成效追蹤(第三階段):每天每個策略選出的股票,以及 5 日 / 20 日後的報酬(見 tracking.py)
+CREATE TABLE IF NOT EXISTS signals (
+    date TEXT, strategy TEXT, stock_id TEXT, direction TEXT,
+    PRIMARY KEY (date, strategy, stock_id)
+);
+CREATE TABLE IF NOT EXISTS signal_returns (
+    date TEXT, strategy TEXT, stock_id TEXT, horizon INTEGER,
+    entry_date TEXT, entry_price REAL, exit_date TEXT, exit_price REAL,
+    ret REAL, index_ret REAL,
+    PRIMARY KEY (date, strategy, stock_id, horizon)
+);
+
 -- 哪幾天的報表已經推播成功。晚到的排程或重複觸發看到今天已推過,就不會再推一次。
 CREATE TABLE IF NOT EXISTS pushed_reports (
     date TEXT PRIMARY KEY, sent_at TEXT, n_messages INTEGER

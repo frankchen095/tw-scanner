@@ -35,8 +35,15 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # PDF 用 Chrome 轉檔,需要中文字型(Actions 的 Ubuntu 預設沒有)
+      - name: 安裝中文字型
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+
       - name: 執行盤後掃描
         env:
+          PUBLISH_PDF: "1"   # 在 Actions 裡才會把 PDF commit 到 docs/ 並用 GitHub Pages 發佈
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
@@ -51,4 +58,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/scanner.db
           git diff --staged --quiet || git commit -m "資料更新: $(date -u +%Y-%m-%d)"
+          git pull --rebase --autostash || true
           git push

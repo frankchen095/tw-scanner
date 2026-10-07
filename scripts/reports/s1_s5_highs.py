@@ -52,11 +52,15 @@ def build(ctx):
     def real_close(sid):
         return float(px.loc[sid, "close"]) if sid in px.index else float("nan")
 
-    def chg(sid):
+    def chg_pct(sid):
         if sid not in px.index or pd.isna(px.loc[sid, "spread"]):
-            return ""
+            return None
         c, s = float(px.loc[sid, "close"]), float(px.loc[sid, "spread"])
-        return f" ({s / (c - s) * 100:+.1f}%)" if c - s else ""
+        return s / (c - s) * 100 if c - s else None
+
+    def chg(sid):
+        v = chg_pct(sid)
+        return "" if v is None else f" ({v:+.1f}%)"
 
     s1.sort(key=lambda x: x[1])
     lines1 = [
@@ -77,6 +81,8 @@ def build(ctx):
         lines5.append(note)
 
     return {
-        "s1": result("s1", T1, lines1, [sid for sid, _ in s1]),
-        "s5": result("s5", T5, lines5, s5),
+        "s1": result("s1", T1, lines1, [sid for sid, _ in s1],
+                     rows=[{"sid": sid, "close": real_close(sid), "gap": gap} for sid, gap in s1], skipped=len(skipped)),
+        "s5": result("s5", T5, lines5, s5,
+                     rows=[{"sid": sid, "close": real_close(sid), "chg": chg_pct(sid)} for sid in s5], skipped=len(skipped)),
     }

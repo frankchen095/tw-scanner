@@ -58,7 +58,9 @@ def _rank8(ctx, df, title):
         f"{i}. {ctx.label(sid)} 合計{fmt_yi(r['total'], True)} (外資{fmt_yi(r[FOREIGN], True)} / 投信{fmt_yi(r[TRUST], True)})"
         for i, (sid, r) in enumerate(top.iterrows(), 1)
     ]
-    return lines or ["今天沒有合計買超的股票"], top.index.tolist()
+    rows = [{"sid": sid, "total": float(r["total"]), "foreign": float(r[FOREIGN]), "trust": float(r[TRUST])}
+            for sid, r in top.iterrows()]
+    return lines or ["今天沒有合計買超的股票"], top.index.tolist(), rows
 
 
 def _streaks(ctx, df, investor):
@@ -96,6 +98,11 @@ def _lines9(ctx, rows):
     return lines or ["今天沒有符合條件的股票"]
 
 
+def _rows9(rows):
+    return [{"sid": sid, "streak": int(streak), "amt": float(amt), "ratio": ratio, "capped": bool(capped)}
+            for sid, streak, amt, ratio, capped in rows]
+
+
 def build(ctx):
     keys = [("s8_1", T8_1), ("s8_5", T8_5), ("s9_trust", T9_TRUST), ("s9_foreign", T9_FOREIGN)]
     if ctx.big is None:
@@ -108,16 +115,16 @@ def build(ctx):
     df = _load(ctx.conn, d30, ctx.big)
     d1, d5 = d30[-1:], d30[-5:]
 
-    lines1, picks1 = _rank8(ctx, df[df["date"].isin(d1)], T8_1)
-    lines5, picks5 = _rank8(ctx, df[df["date"].isin(d5)], T8_5)
+    lines1, picks1, rows1 = _rank8(ctx, df[df["date"].isin(d1)], T8_1)
+    lines5, picks5, rows5 = _rank8(ctx, df[df["date"].isin(d5)], T8_5)
     if len(d5) < 5:
         lines5.append(f"(資料庫只有 {len(d5)} 個交易日的法人資料,近5日版不足5天)")
 
     trust = _streaks(ctx, df, TRUST)
     foreign = _streaks(ctx, df, FOREIGN)
     return {
-        "s8_1": result("s8_1", T8_1, lines1, picks1),
-        "s8_5": result("s8_5", T8_5, lines5, picks5),
-        "s9_trust": result("s9_trust", T9_TRUST, _lines9(ctx, trust), [x[0] for x in trust]),
-        "s9_foreign": result("s9_foreign", T9_FOREIGN, _lines9(ctx, foreign), [x[0] for x in foreign]),
+        "s8_1": result("s8_1", T8_1, lines1, picks1, rows=rows1),
+        "s8_5": result("s8_5", T8_5, lines5, picks5, rows=rows5),
+        "s9_trust": result("s9_trust", T9_TRUST, _lines9(ctx, trust), [x[0] for x in trust], rows=_rows9(trust)),
+        "s9_foreign": result("s9_foreign", T9_FOREIGN, _lines9(ctx, foreign), [x[0] for x in foreign], rows=_rows9(foreign)),
     }

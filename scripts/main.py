@@ -1,8 +1,8 @@
 """
 main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LINE 推播
 
-推播順序:交集榜 → 策略一~五 → 策略八、九 → 策略六(時事分析)
-(策略七地緣分點在第二階段加入;成效追蹤在第三階段加入,只在每週五推播)
+推播順序:交集榜 → 策略一~五 → 策略七 → 策略八、九 → 策略六(時事分析)→ 成效追蹤(只在每週五)
+每次正式推播會把各策略選出的股票記進 signals 表,每天更新滿 5/20 個交易日的報酬(見 tracking.py)
 
 舊的 功能1(大摩+法人排行)、功能2(外資投信同買)、功能4(帶量突破盤整)已停用,
 程式檔案還留在 scripts/reports/,沒有被呼叫。
@@ -13,6 +13,7 @@ main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LIN
     python scripts/main.py --date 2026-10-06 --no-fetch   # 跳過抓資料,只用資料庫現有資料出報表
     python scripts/main.py --date 2026-10-06 --dry-run    # 不推播,只印在畫面上看結果
     python scripts/main.py --dry-run --no-news            # 跳過策略六(不需要 ANTHROPIC_API_KEY)
+    python scripts/main.py --dry-run --show-performance   # 不是週五也把成效追蹤彙總印出來
 """
 
 import argparse
@@ -28,7 +29,10 @@ from fetchers import do_fetch  # noqa: E402
 from geo import refresh_geo  # noqa: E402
 from mops_buyback import refresh_programs  # noqa: E402
 from notify import pack, send_line  # noqa: E402
+import pdf_report  # noqa: E402
+import publish  # noqa: E402
 from risk_tags import RiskTags  # noqa: E402
+from tracking import record_signals, summary_text, update_returns  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "reports"))
 import feature3_news as s6_news  # noqa: E402
@@ -39,6 +43,8 @@ import s3_limit_up  # noqa: E402
 import s4_revenue  # noqa: E402
 import s7_geo_brokers  # noqa: E402
 import s8_s9_institutional  # noqa: E402
+import s10_global_highs  # noqa: E402
+import calendar_events  # noqa: E402
 
 DISCLAIMER = "以上為程式依公開資料自動整理的篩選結果,不是投資建議;歷史命中率不代表未來表現。"
 
@@ -54,6 +60,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="不推播,只印在畫面上")
     parser.add_argument("--no-news", action="store_true", help="跳過策略六(時事分析),測試時省時間")
     parser.add_argument("--force", action="store_true", help="這天已經推播過也再推一次")
+    parser.add_argument("--no-pdf", action="store_true", help="不產生 PDF,直接用文字訊息推播")
+    parser.add_argument("--show-performance", action="store_true", help="不是週五也附上成效追蹤彙總")
     args = parser.parse_args()
     day = args.date
 
@@ -97,6 +105,8 @@ def main():
         ("策略四", s4_revenue),
         ("策略七", s7_geo_brokers),
         ("策略八/九", s8_s9_institutional),
+        ("策略十", s10_global_highs),
+        ("行事曆", calendar_events),
     ]:
         try:
             print(f"  {name}…")
@@ -105,19 +115,41 @@ def main():
             traceback.print_exc()
             failures.append(f"{name} 執行失敗:{str(e)[:150]}")
 
-    sections = [f"台股盤後掃描 {day}"]
-    sections.append(render(intersection.build(ctx, res)))
-    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s7", "s8_1", "s8_5", "s9_trust", "s9_foreign"):
+    inter = intersection.build(ctx, res)
+    sections = [f"台股盤後掃描 {day}", render(inter)]
+    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s7", "s8_1", "s8_5", "s9_trust", "s9_foreign", "s10", "calendar"):
         if key in res:
             sections.append(render(res[key]))
 
+    s6_sections = []
+    perf_text = None
     if not args.no_news:
         print("  策略六(時事分析)…")
         try:
-            sections += s6_news.build(conn, day)
+            s6_sections = s6_news.build(conn, day)
+            sections += s6_sections
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             failures.append(f"策略六 執行失敗:{str(e)[:150]}")
+
+    # 成效追蹤:正式推播才記錄今天的訊號(dry-run 不記,免得測試資料混進去);每天更新到期的報酬
+    if not args.dry_run:
+        try:
+            print(f"  成效追蹤:記錄 {record_signals(conn, day, {**res, 'intersection': inter})} 筆訊號")
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            failures.append(f"成效追蹤記錄訊號失敗:{str(e)[:150]}")
+    try:
+        n_new, err = update_returns(conn, day)
+        print(f"  成效追蹤:新算出 {n_new} 筆報酬")
+        if err:
+            risk.errors.append(err)
+        if date.fromisoformat(day).weekday() == 4 or args.show_performance:
+            perf_text = summary_text(conn, day)
+            sections.append(perf_text)
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        failures.append(f"成效追蹤更新失敗:{str(e)[:150]}")
 
     notes = []
     for e in (geo_error, buyback_error):
@@ -134,10 +166,39 @@ def main():
     notes.append(DISCLAIMER)
     sections.append("\n\n".join(notes))
 
-    bubbles = pack(sections)
+    # 先試著做 PDF 並發佈成網址;成功就只推「摘要+連結」,任何一步失敗就退回原本的文字訊息
+    pdf_url, pdf_summary = None, None
+    if not args.no_pdf:
+        try:
+            full = {**res, "intersection": inter}
+            pdf_summary = pdf_report.summary_text(ctx, full)
+            html = pdf_report.build_html(
+                ctx, day, full, s6_text="\n".join(s6_sections) or None, perf_text=perf_text, notes=notes,
+            )
+            if args.dry_run:
+                out = Path(__file__).resolve().parent.parent / "out" / f"{day}.pdf"
+            else:
+                out = publish.pdf_path_for(day)
+            if pdf_report.html_to_pdf(html, out):
+                print(f"  PDF 已產生:{out}")
+                pdf_url = publish.pdf_url_for(day) if args.dry_run else publish.publish(day)
+            else:
+                print("  PDF 沒有產生,改用文字訊息")
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            print("  PDF 流程出錯,改用文字訊息")
+
+    if pdf_url:
+        extra = [n for n in notes if n != DISCLAIMER and n != ctx.mv_note]
+        text = f"台股盤後掃描 {day}\n{pdf_summary}\n\n完整報表(PDF):\n{pdf_url}"
+        if extra:
+            text += "\n\n" + "\n\n".join(extra)
+        bubbles = pack([text])
+    else:
+        bubbles = pack(sections)
     ok = True
     if args.dry_run:
-        for s in sections:
+        for s in (bubbles if pdf_url else sections):
             print("\n" + "=" * 60)
             print(s)
         print("\n" + "=" * 60)

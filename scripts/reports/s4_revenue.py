@@ -87,11 +87,12 @@ def build(ctx):
         rows.append((r.stock_id, r.revenue_month, vals[-1], mom, flag, is_high))
 
     rows.sort(key=lambda x: (x[3] is None, -(x[3] or 0)))
-    lines = []
-    for sid, month, rev, mom, flag, _ in rows:
+    lines, out_rows = [], []
+    for sid, month, rev, mom, flag, is_high in rows:
+        out_rows.append({"sid": sid, "month": int(month), "rev": float(rev), "mom": mom, "flag": flag, "is_high": bool(is_high)})
         mom_txt = f"MoM{mom:+.1f}%" if mom is not None else "MoM無資料"
         flag_txt = f"({flag})" if flag else ""
         lines.append(f"{ctx.label(sid)} {month}月營收:{rev / 1e8:,.2f}億 {mom_txt}{flag_txt}")
 
     picks_high = [x[0] for x in rows if x[5]]
-    return {"s4": result("s4", TITLE, lines, picks_high, all_picks=[x[0] for x in rows])}
+    return {"s4": result("s4", TITLE, lines, picks_high, all_picks=[x[0] for x in rows], rows=out_rows)}

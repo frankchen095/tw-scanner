@@ -238,6 +238,11 @@ def build(conn, report_date):
     except Exception as e:  # noqa: BLE001
         return [f"{TITLE}\n(呼叫 AI 分析失敗: {e})"]
 
+    # Claude 搜尋前常會先講一句話(例如 "I'll verify the key stories..."),被黏在第一個區塊前面,去掉
+    m = re.search(r"(利多|利空)[:：]", analysis)
+    if m and m.start() > 0:
+        analysis = analysis[m.start():]
+
     if conn is not None:
         rows = conn.execute("SELECT stock_id, name FROM stock_info WHERE is_common=1").fetchall()
         analysis = link_stocks(analysis, build_name_map(rows))
