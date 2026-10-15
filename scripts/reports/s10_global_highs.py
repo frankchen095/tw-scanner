@@ -109,7 +109,7 @@ def build(ctx):
     if all(a is None for _, a, _ in outs):
         return {"s10": nodata("s10", TITLE, "今日無資料(Yahoo Finance 行情抓不到,沒有用其他資料頂替)")}
 
-    rows, lines, failed = [], [], []
+    rows, lines, failed, dates = [], [], [], {}
     for mkt in ("美國", "日本"):
         sub = [(j, a) for j, a, _ in outs if j[0] == mkt and a is not None]
         bad = [j for j, a, _ in outs if j[0] == mkt and a is None]
@@ -118,6 +118,7 @@ def build(ctx):
             lines.append(f"{mkt}:今日無資料")
             continue
         day_used = max(a["date"] for _, a in sub)
+        dates[mkt] = day_used
         hits = sorted([(j, a) for j, a in sub if a["new60"]], key=lambda x: -(x[1]["ret5"] or 0))
         lines.append(f"{mkt}({day_used}收盤):{len(sub)} 個族群中 {len(hits)} 個創60日新高")
         for i, ((_, sym, name), a) in enumerate(hits, 1):
@@ -130,4 +131,4 @@ def build(ctx):
     if failed:
         lines.append("(沒抓到資料或資料不足:" + "、".join(failed) + ")")
     lines.append("(族群用 ETF 代表;日期是各市場實際取得的最新收盤日)")
-    return {"s10": result("s10", TITLE, lines, [], rows=rows, failed=failed)}
+    return {"s10": result("s10", TITLE, lines, [], rows=rows, failed=failed, dates=dates)}

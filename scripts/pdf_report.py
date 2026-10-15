@@ -316,7 +316,7 @@ def _s10(ctx, res):
 
     def card(mkt):
         sel = [x for x in rows if x["market"] == mkt]
-        day_used = sel[0]["date"] if sel else "-"
+        day_used = r.get("meta", {}).get("dates", {}).get(mkt) or (sel[0]["date"] if sel else "-")
         body = ""
         for i, x in enumerate(sel, 1):
             star = '<span class="chip warn">52週新高</span>' if x["new52w"] else ""
