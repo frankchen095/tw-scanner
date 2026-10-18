@@ -37,20 +37,31 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import finmind_query  # noqa: E402
 
-UA = {"User-Agent": "Mozilla/5.0"}
+UA = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+}
 TIMEOUT = 30
 
 
-def _get_json(url, params=None, retries=2):
+def _headers_for(url):
+    h = dict(UA)
+    if "tpex.org.tw" in url:  # 櫃買的 OpenAPI 從 GitHub Actions 的 IP 偶爾會回 403,帶 Referer + 瀏覽器標頭、失敗多重試幾次
+        h["Referer"] = "https://www.tpex.org.tw/"
+    return h
+
+
+def _get_json(url, params=None, retries=3, timeout=None):
     last = None
-    for _ in range(retries + 1):
+    for i in range(retries + 1):
         try:
-            r = requests.get(url, params=params, headers=UA, timeout=TIMEOUT)
+            r = requests.get(url, params=params, headers=_headers_for(url), timeout=timeout or TIMEOUT)
             r.raise_for_status()
             return r.json()
         except Exception as e:  # noqa: BLE001
             last = e
-            time.sleep(2)
+            time.sleep(2 + 4 * i)
     raise RuntimeError(f"{url} 連線失敗: {last}")
 
 

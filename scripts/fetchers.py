@@ -458,9 +458,9 @@ def fetch_insider_transfer(conn, day):
         ("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap12_O", "上櫃", "Date", "SecuritiesCompanyCode", "申請人身分"),
     ]:
         try:
-            data = requests.get(url, headers=H, timeout=40).json()
+            data = _get_json(url)
         except Exception as e:  # noqa: BLE001
-            print(f"  內部人轉讓申報({market})抓取失敗:{str(e)[:80]}")
+            print(f"  內部人轉讓申報({market})抓取失敗:{str(e)[:120]}")
             continue
         for x in data:
             d = _roc8(x.get(date_key))
@@ -486,9 +486,9 @@ def fetch_pledge_monthly(conn, day):
     for url in ["https://openapi.twse.com.tw/v1/opendata/t187ap11_L",
                 "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap11_O"]:
         try:
-            data = requests.get(url, headers=H, timeout=90).json()
+            data = _get_json(url, timeout=90)
         except Exception as e:  # noqa: BLE001
-            print(f"  董監質押月報抓取失敗({url[-14:]}):{str(e)[:60]}")
+            print(f"  董監質押月報抓取失敗({url[-14:]}):{str(e)[:120]}")
             return None
         for x in data:
             title = x.get("職稱", "")
