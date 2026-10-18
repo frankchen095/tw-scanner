@@ -551,14 +551,19 @@ def summarize(conn, ret_df, base_df, d_from, d_to, skipped, chips_last):
         return "\n".join(lines)
     ret_df = ret_df.copy()
     ret_df["year"] = ret_df["date"].str[:4]
-    base = base_df.groupby(["strategy", "horizon"]).apply(
-        lambda g: np.average(g["base_ret"], weights=g["n"]) if len(g) else np.nan, include_groups=False) if not base_df.empty else pd.Series(dtype=float)
+    def base_for(label, h, dates):
+        """隨機基準:只取『這組訊號出現過的日期』的那幾天(依訊號檔數加權),所以分年/樣本內外的表各有自己的基準"""
+        if base_df.empty:
+            return np.nan
+        under = label.split("(")[0]
+        b = base_df[(base_df["strategy"] == under) & (base_df["horizon"] == h) & (base_df["date"].isin(dates))]
+        return float(np.average(b["base_ret"], weights=b["n"])) if len(b) else np.nan
 
     def table(sel, title):
         rows = []
         for (k, h), g in sel.groupby(["strategy", "horizon"]):
             s = _stats(g)
-            b = base.get((k, h), np.nan)
+            b = base_for(k, h, set(g["date"]))
             rows.append((k, h, int(s["n"]), s["mean"], s["win"], s["index"], s["mean"] - s["index"], b))
         out = [f"## {title}", "", "| 策略 | 天數 | 訊號數 | 平均報酬 | 勝率 | 同期大盤 | 超額報酬 | 隨機抽樣基準 |", "|---|---|---|---|---|---|---|---|"]
         for k, h, n, m, w, ix, ex, b in sorted(rows):
@@ -612,7 +617,7 @@ def summarize(conn, ret_df, base_df, d_from, d_to, skipped, chips_last):
                 continue
             n, m, w = len(g), g["ret"].mean(), (g["ret"] > 0).mean()
             ex = m - g["index_ret"].mean()
-            b = base.get((k, h), np.nan)
+            b = base_for(k, h, set(g["date"]))
             if n < MIN_N:
                 verdicts.append(f"{h}日:樣本不足(N={n})")
             elif m > 0 and ex > 0 and w > 0.5 and (pd.isna(b) or m > b):
