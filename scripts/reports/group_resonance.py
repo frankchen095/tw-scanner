@@ -7,7 +7,7 @@
   2. 預設產業別:stock_info.industry(證交所/櫃買產業別,很粗,只當保底)。一檔股票沒有在任何自訂族群裡,才用預設產業別。
 
 偏多榜(各榜出現過就算,標它中了哪些類別):價格位置(策略一〔近高〕/策略五〔創高〕)、策略二今日買超榜〔分點〕、
-策略七〔地緣〕、法人(策略八、九)〔法人〕、質押〔質押〕(C 項沒有每日資料,所以目前沒有這一類)。
+策略七〔地緣〕、法人(策略八、九)〔法人〕、質押〔質押〕(策略十一月頻〔設質〕)。
 共振條件:自訂子族群 ≥ 3 檔;預設產業別 ≥ 5 檔,且 ≥ 該產業『沒有在自訂族群、市值>500億』成員數的 20%。
 族群內只要有股票同時在空方榜(策略三漲停放空、借券大增、散戶接刀榜、內部人申報轉讓〔真的要賣〕),整個族群標
 『族群內有空方訊號:XX、YY』。
@@ -52,12 +52,13 @@ def _bull_tags(res):
     add(res["s2_buy"]["picks"] if "s2_buy" in res else [], "分點")
     add(res["s7"]["picks"] if "s7" in res else [], "地緣")
     add([x for k in ("s8_1", "s8_5", "s9_trust", "s9_foreign") for x in (res[k]["picks"] if k in res else [])], "法人")
+    add(res["s11"]["picks"] if "s11" in res else [], "質押")
     return tags
 
 
 def _bear_sids(res):
     out = {}
-    for key, label in (("s3", "漲停放空"), ("s13", "借券大增"), ("e_knife", "散戶接刀"), ("s16", "申報轉讓")):
+    for key, label in (("s3", "漲停放空"), ("s13", "借券大增"), ("e_knife", "散戶接刀"), ("s16", "申報轉讓"), ("s11_release", "解質")):
         for sid in res[key]["picks"] if key in res else []:
             out.setdefault(sid, label)
     return out

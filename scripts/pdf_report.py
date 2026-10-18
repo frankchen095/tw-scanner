@@ -137,7 +137,7 @@ def _line0(res, key):
 
 # ---------- 各區塊 ----------
 
-CATS = [("價格位置", "價格", "位置"), ("策略二", "二", "分點"), ("策略七", "七", "地緣"), ("法人", "法人", "買超")]
+CATS = [("價格位置", "價格", "位置"), ("策略二", "二", "分點"), ("策略七", "七", "地緣"), ("法人", "法人", "買超"), ("質押", "質", "押")]
 
 
 def _intersection(ctx, res):
@@ -160,7 +160,7 @@ def _intersection(ctx, res):
                     mark = '<span class="chip sell">賣</span>' + mark
                 cells += f'<td class="c">{mark}</td>'
             short = '<span class="chip short">空</span>' if any("策略三" in c for c in r["conflicts"]) else ""
-            for cname, ctext in (("借券大增榜", "借券增"), ("散戶接刀榜", "接刀"), ("申報轉讓榜", "申報轉讓")):
+            for cname, ctext in (("借券大增榜", "借券增"), ("散戶接刀榜", "接刀"), ("申報轉讓榜", "申報轉讓"), ("解質榜", "解質")):
                 if cname in r["conflicts"]:
                     short += f'<span class="chip short">{ctext}</span>'
             short += _mc(r)
@@ -523,6 +523,35 @@ def _s15(ctx, res):
     return out
 
 
+def _s11(ctx, res):
+    r = res.get("s11")
+    if not r:
+        return ""
+    m = r.get("meta", {})
+    sub = ("董監事/經理人/大股東當月設質股數變化(月頻:這個月 vs 上個月),|變化|≥10% 持股才列;"
+           "〔設質〕偏多、〔解質〕偏空;月報看不出哪一天,也分不出借款到期還款等雜訊")
+    up = m.get("rows", [])
+    down = res.get("s11_release", {}).get("meta", {}).get("rows", [])
+    if not up and not down and r["lines"] and "今日無資料" in r["lines"][0]:
+        return _section("策略十一 質押/解質(月頻)", None, sub, _msg(r["lines"][0]))
+
+    def card(title, rows):
+        body = ""
+        for i, x in enumerate(rows, 1):
+            mv = "-" if not x.get("mv") else f'{x["mv"] / 1e8:,.0f}億'
+            body += (f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td><td>{mv}</td>'
+                     f'<td class="l">{esc(x["title"])} {esc(x["name"])}</td><td>{x["delta"] / 1e4:+,.0f}萬股</td>'
+                     f'<td>{x["ratio"] * 100:.0f}%</td><td>{x["total_ratio"] * 100:.0f}%</td></tr>')
+        body = body or '<tr><td class="l" colspan="7">本月沒有符合條件的</td></tr>'
+        return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
+                f'<th>市值</th><th class="l">申報人</th><th>設質變化</th><th>占持股</th><th>累計質押</th></tr></thead>'
+                f'<tbody>{body}</tbody></table></div>')
+
+    foot = f'<p class="foot">資料月份 {esc(m.get("ym", ""))} 對比 {esc(m.get("prev", ""))}</p>'
+    return _section("策略十一 質押/解質(月頻)", len(up) + len(down), sub,
+                    card("〔設質〕設質增加(偏多)", up) + card("〔解質〕設質減少(偏空)", down) + foot)
+
+
 def _s16(ctx, res):
     r = res.get("s16")
     if not r:
@@ -742,7 +771,7 @@ def build_html(ctx, day, res, s6_text=None, perf_text=None, notes=None):
              + _intersection(ctx, res) + _group(ctx, res))
     page_price = _s1(ctx, res)
     page_s2 = _s5(ctx, res) + _s2(ctx, res)
-    page_inst = _s8(ctx, res) + _s9(ctx, res) + _s16(ctx, res) + _s14(ctx, res)
+    page_inst = _s8(ctx, res) + _s9(ctx, res) + _s11(ctx, res) + _s16(ctx, res) + _s14(ctx, res)
     page_bear = _s3(ctx, res) + _s13(ctx, res) + _e_knife(ctx, res)
     page_event = _s4(ctx, res) + _s15(ctx, res) + _s12(ctx, res)
     page_geo = _s7(ctx, res) + _s10(ctx, res)

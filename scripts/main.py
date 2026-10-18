@@ -2,7 +2,7 @@
 main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LINE 推播
 
 推播順序(每段標 §編號,方便在手機上找):
-  §1 交集榜 → §2 族群訊號 → 價格位置(策略一、五)→ 策略二 → 法人(策略八、九)→ 質押(未做,見 README)→
+  §1 交集榜 → §2 族群訊號 → 價格位置(策略一、五)→ 策略二 → 法人(策略八、九)→ 質押(策略十一,月頻,只在新一個月資料入庫日)→
   內部人申報轉讓(策略十六)→ 大戶持股比(策略十四,只在集保新一週資料入庫日)→
   空方區(策略三、借券 策略十三、散戶接刀榜)→ 事件區(策略四、毛利率轉折 策略十五、基本面動能榜、負面新聞)→
   策略七 → 策略十(美日族群創新高)→ 行事曆 → 策略六(時事分析)→ 成效追蹤(只在每週五)
@@ -49,6 +49,7 @@ import s4_revenue  # noqa: E402
 import s7_geo_brokers  # noqa: E402
 import s8_s9_institutional  # noqa: E402
 import s10_global_highs  # noqa: E402
+import s11_pledge  # noqa: E402
 import calendar_events  # noqa: E402
 import group_resonance  # noqa: E402
 import margin_notes  # noqa: E402
@@ -133,6 +134,7 @@ def main():
         ("策略十三 借券", s13_short_lending),
         ("策略十四 大戶持股", s14_big_holders),
         ("策略十五 財報/動能榜", s15_margin_turn),
+        ("策略十一 質押(月頻)", s11_pledge),
         ("策略十六 內部人轉讓", s16_insider_transfer),
         ("策略十", s10_global_highs),
         ("行事曆", calendar_events),
@@ -161,6 +163,7 @@ def main():
         "s1", "s5",
         "s2_buy", "s2_sell", "s2_buy3",
         "s8_1", "s8_5", "s9_trust", "s9_foreign",
+        "s11", "s11_release",
         "s16",
         "s14", "s14_down",
         "s3", "s13", "s13_cover", "e_knife",

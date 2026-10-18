@@ -178,6 +178,12 @@ CREATE TABLE IF NOT EXISTS group_signals (
     date TEXT, group_name TEXT, stock_id TEXT, PRIMARY KEY (date, group_name, stock_id)
 );
 
+-- 董監事/經理人/大股東逐人持股與設質(月報,質押策略 s11 用:這個月和上個月的設質股數相減 = 當月設質/解質變化)
+CREATE TABLE IF NOT EXISTS pledge_person_monthly (
+    ym TEXT, stock_id TEXT, title TEXT, name TEXT, held REAL, pledged REAL, first_seen TEXT,
+    PRIMARY KEY (ym, stock_id, title, name)
+);
+
 -- 回測訊號(L 項):跟正式推播的 signals 分開
 CREATE TABLE IF NOT EXISTS backtest_signals (
     date TEXT, strategy TEXT, stock_id TEXT, direction TEXT,

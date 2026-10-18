@@ -449,9 +449,8 @@ def _num(v):
 def fetch_insider_transfer(conn, day):
     """證交所/櫃買 OpenAPI『每日內部人持股轉讓事前申報表-持股轉讓日報表』:每天只提供最近一個營業日那一份,
     所以每天抓下來存起來。回傳存了幾筆。"""
-    import requests  # noqa: PLC0415
+    from risk_tags import _get_json  # noqa: PLC0415
 
-    H = {"User-Agent": "Mozilla/5.0"}
     rows = []
     for url, market, date_key, code_key, ident_key in [
         ("https://openapi.twse.com.tw/v1/opendata/t187ap12_L", "上市", "出表日期", "公司代號", "申報人身分"),
@@ -478,11 +477,13 @@ def fetch_insider_transfer(conn, day):
 
 
 def fetch_pledge_monthly(conn, day):
-    """董監事持股餘額明細(月報,每月更新一次):算每家公司『董事/監察人整體』的設質比。已經是最新一個月就不重抓。"""
-    import requests  # noqa: PLC0415
+    """董監事持股餘額明細(月報,每月更新一次,含董事/監察人/經理人/10%以上大股東):
+    1. 逐人存進 pledge_person_monthly(質押策略 s11 用兩個月相減得到當月設質/解質);第一次存的那個月 first_seen='baseline'。
+    2. 算每家公司『董事/監察人整體』的設質比存進 insider_pledge_monthly(〔質押比高〕風險標記用)。
+    已經是最新一個月就不重抓。回傳最新月份。"""
+    from risk_tags import _get_json  # noqa: PLC0415
 
-    H = {"User-Agent": "Mozilla/5.0"}
-    agg, ym = {}, None
+    agg, people, ym = {}, [], None
     for url in ["https://openapi.twse.com.tw/v1/opendata/t187ap11_L",
                 "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap11_O"]:
         try:
@@ -491,25 +492,34 @@ def fetch_pledge_monthly(conn, day):
             print(f"  董監質押月報抓取失敗({url[-14:]}):{str(e)[:120]}")
             return None
         for x in data:
-            title = x.get("職稱", "")
-            if not ("董事" in title or "監察人" in title):  # 只算董監;經理人、大股東不算
-                continue
             ym = ym or x.get("資料年月")
-            a = agg.setdefault(str(x.get("公司代號", "")).strip(), [0.0, 0.0])
-            a[0] += _num(x.get("目前持股"))
-            a[1] += _num(x.get("設質股數"))
+            sid = str(x.get("公司代號", "")).strip()
+            title, name = x.get("職稱", "").strip(), x.get("姓名", "").strip()
+            held, pledged = _num(x.get("目前持股")), _num(x.get("設質股數"))
+            people.append((x.get("資料年月"), sid, title, name, held, pledged))
+            if "董事" in title or "監察人" in title:  # 公司整體質押比只算董監;經理人、大股東不算
+                a = agg.setdefault(sid, [0.0, 0.0])
+                a[0] += held
+                a[1] += pledged
     if not agg or not ym:
         return None
     latest = conn.execute("SELECT MAX(ym) FROM insider_pledge_monthly").fetchone()[0]
     if latest and latest >= ym:
         return latest
+    first = conn.execute("SELECT COUNT(*) FROM pledge_person_monthly").fetchone()[0] == 0
+    tag = "baseline" if first else day
+    conn.executemany(
+        "INSERT OR IGNORE INTO pledge_person_monthly VALUES (?,?,?,?,?,?,?)",
+        [(m, sid, t, n, h, p, tag) for m, sid, t, n, h, p in people if m],
+    )
+    conn.execute("DELETE FROM pledge_person_monthly WHERE ym < ?", (str(int(ym) - 3),))  # 只留近幾個月
     conn.execute("DELETE FROM insider_pledge_monthly")
     conn.executemany(
         "INSERT OR REPLACE INTO insider_pledge_monthly VALUES (?,?,?,?,?,?)",
         [(ym, sid, h, p, (p / h if h else 0.0), day) for sid, (h, p) in agg.items()],
     )
     conn.commit()
-    print(f"  董監質押月報:{ym},{len(agg)} 家公司")
+    print(f"  董監質押月報:{ym},{len(agg)} 家公司、{len(people)} 筆逐人資料(first_seen={tag})")
     return ym
 
 

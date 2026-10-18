@@ -12,8 +12,8 @@
 列出門檻(任一):預定轉讓股數 ÷ 申報人目前持股 ≥ 10%;或 預定轉讓股數 × 當日收盤價 ≥ 1 億元。
 不設市值門檻,每檔標市值。
 
-【沒做到的部分】指令要把這個榜跟 C 項(質權設定/解除每日申報)串起來:同一人 30 天內有〔解質〕紀錄標〔解質後轉讓〕。
-C 項需要的『每日設質/解質申報』官方只有月報(見 README),沒有每日資料可抓,所以這個標記沒有做,也不會假裝有。
+【解質後轉讓】同一家公司、同一個人在最新一期質押月報(策略十一)有解質的,標〔解質後轉讓〕並排最前面(最強的偏空確認)。
+月報看不出哪一天解質,所以比對的是『當月』而不是『申報日往前30天』。
 """
 
 import re
@@ -24,6 +24,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from context import nodata, result  # noqa: E402
+from s11_pledge import released_people  # noqa: E402
 
 TITLE = "【策略十六:內部人申報轉讓】董監事/經理人/大股東事前申報,今天出表的申報(偏空,信託/贈與除外)"
 RATIO_MIN = 0.10
@@ -55,6 +56,10 @@ def build(ctx):
         why = "今日無資料(今天沒有申報,或官方申報表還沒更新" + (f";資料庫最近一筆出表日期 {last}" if last else "") + ")"
         return {"s16": nodata("s16", TITLE, why)}
     px = pd.read_sql("SELECT stock_id, close FROM daily_price WHERE date=?", ctx.conn, params=[ctx.day]).set_index("stock_id")["close"]
+    try:
+        released = released_people(ctx.conn)  # 當月(月報)有解質的人:(公司代號, 姓名)
+    except Exception:  # noqa: BLE001
+        released = set()
     picks, items = [], []
     for sid, name, ident, method, shares, held, period in rows:
         if shares <= 0:
@@ -66,9 +71,10 @@ def build(ctx):
             continue
         side, label = _kind(method)
         items.append({"sid": sid, "name": name, "identity": ident, "side": side, "kind": label, "shares": shares,
-                      "ratio": ratio, "amount": amount, "period": period})
+                      "ratio": ratio, "amount": amount, "period": period, "released": (sid, name) in released})
     # 偏空(真的要賣)排前面,各自依占持股比由大到小
-    items.sort(key=lambda x: (x["side"] != "sell", -(x["ratio"] or 0)))
+    # 〔解質後轉讓〕(同公司同一人當月有解質)最前面,再來是偏空(真的要賣),各自依占持股比由大到小
+    items.sort(key=lambda x: (not x["released"], x["side"] != "sell", -(x["ratio"] or 0)))
     lines = []
     for i, x in enumerate(items, 1):
         mv = ctx.mv.get(x["sid"]) if ctx.mv else None
@@ -76,7 +82,7 @@ def build(ctx):
         ratio = "占其持股 -" if x["ratio"] is None else f"占其持股 {x['ratio'] * 100:.1f}%"
         amt = "" if x["amount"] is None else f",約 {x['amount'] / 1e8:,.2f} 億元"
         lines.append(f"{i}. {ctx.label(x['sid'])} {mv_txt}〔{x['kind']}〕{x['identity']} {x['name']} "
-                     f"預定轉讓 {_wan(x['shares'])}({ratio}{amt})")
+                     f"預定轉讓 {_wan(x['shares'])}({ratio}{amt})" + ("〔解質後轉讓〕" if x["released"] else ""))
     if not lines:
         lines = [f"今天有 {len(rows)} 筆申報,但都沒達到門檻(占持股≥10% 或 約1億元)"]
     else:

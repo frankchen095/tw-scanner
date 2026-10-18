@@ -7,12 +7,12 @@
   策略二            前40大分點『今日買超榜』(不含近3日版)
   策略七            地緣分點買進(同區分點或庫藏股分點)
   法人              策略八、策略九合算一類(避免自己跟自己重複)
+  質押              策略十一(月頻)市值>500億、當月〔設質〕的股票
   (策略四營收公布是事件型,不納入交集榜)
 排序:先依『連續幾個推播日都在交集榜』多到少(≥2 日才標「連 N 日」),再依類別數、代號。
 連續天數只算正式推播的紀錄(dry-run 不記)。
 訊號衝突:交集榜裡的股票如果同時出現在空方榜,另外標出來:策略三(漲停放空)、策略二今日賣超榜、
-策略十三借券賣出餘額大增榜、散戶接刀榜、策略十六內部人申報轉讓(一般/鉅額交易)。
-(質押〔設質〕類別和〔解質〕衝突來源:需要每日設質/解質申報資料,官方只有月報,沒有做,見 README。)
+策略十三借券賣出餘額大增榜、散戶接刀榜、策略十六內部人申報轉讓(一般/鉅額交易)、策略十一〔解質〕榜(月頻)。
 """
 
 import sys
@@ -26,7 +26,7 @@ TITLE = "【交集榜】同時出現在兩類以上偏多策略"
 PRICE = "價格位置"
 
 
-def categories(res):
+def categories(res, big=frozenset()):
     """從各策略結果整理出 {類別名稱: 股票代號集合}。res 是 {策略key: result}。"""
 
     def picks(*keys):
@@ -40,6 +40,8 @@ def categories(res):
         "策略二": picks("s2_buy"),
         "策略七": picks("s7"),
         "法人": picks("s8_1", "s8_5", "s9_trust", "s9_foreign"),
+        # 質押:市值>500億且當月〔設質〕(月頻;沒有新一個月資料的日子 s11 不存在,這一類就是空的)
+        "質押": picks("s11") & big,
     }
 
 
@@ -51,13 +53,14 @@ def price_kind(res, sid):
 
 
 def build(ctx, res):
-    cats = categories(res)
+    cats = categories(res, ctx.big or frozenset())
     conflict_src = {
         "策略三(漲停放空)": set(res["s3"]["picks"]) if "s3" in res else set(),
         "策略二賣超榜": set(res["s2_sell"]["picks"]) if "s2_sell" in res else set(),
         "借券大增榜": set(res["s13"]["picks"]) if "s13" in res else set(),
         "散戶接刀榜": set(res["e_knife"]["picks"]) if "e_knife" in res else set(),
         "申報轉讓榜": set(res["s16"]["picks"]) if "s16" in res else set(),
+        "解質榜": set(res["s11_release"]["picks"]) if "s11_release" in res else set(),
     }
     all_ids = set().union(*cats.values())
     multi = {}
