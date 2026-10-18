@@ -221,6 +221,8 @@ def _s2(ctx, res):
 
 
 def _s3(ctx, res):
+    if "s3" not in res:  # 策略三已停用
+        return ""
     rows = _rows_of(res, "s3")
     sub = "漲停價成交量占當日>30%,市值>500億"
     if not rows:
@@ -741,12 +743,13 @@ def summary_text(ctx, res):
     if rows:
         conf = sum(1 for r in rows if r["conflicts"])
         top = max(rows, key=lambda r: len(r["cats"]))
-        parts.append(f"交集榜共 {len(rows)} 檔" + (f",其中 {conf} 檔訊號衝突(同時在策略二賣超榜或策略三)。" if conf else "。"))
+        parts.append(f"交集榜共 {len(rows)} 檔" + (f",其中 {conf} 檔訊號衝突(同時在策略二賣超榜、借券大增、散戶接刀或申報轉讓榜)。" if conf else "。"))
         parts.append(f"{ctx.name(top['sid'])}({top['sid']})同時入選 {len(top['cats'])} 類策略,是今天交集最多的一檔。")
     else:
         parts.append("今天沒有同時出現在兩類以上偏多策略的股票。")
-    s3 = _rows_of(res, "s3")
-    parts.append(f"策略三今天有 {len(s3)} 檔符合條件。" if s3 else "策略三今天沒有符合條件的股票。")
+    if "s3" in res:  # 策略三已停用,不在摘要裡提
+        s3 = _rows_of(res, "s3")
+        parts.append(f"策略三今天有 {len(s3)} 檔符合條件。" if s3 else "策略三今天沒有符合條件的股票。")
     grp = _rows_of(res, "group")
     if grp:
         top = max(grp, key=lambda g: len(g["members"]))

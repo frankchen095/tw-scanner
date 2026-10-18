@@ -4,7 +4,7 @@ main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LIN
 推播順序(每段標 §編號,方便在手機上找):
   §1 交集榜 → §2 族群訊號 → 價格位置(策略一、五)→ 策略二 → 法人(策略八、九)→ 質押(策略十一,月頻,只在新一個月資料入庫日)→
   內部人申報轉讓(策略十六)→ 大戶持股比(策略十四,只在集保新一週資料入庫日)→
-  空方區(策略三、借券 策略十三、散戶接刀榜)→ 事件區(策略四、毛利率轉折 策略十五、基本面動能榜、負面新聞)→
+  空方區(借券 策略十三、散戶接刀榜;策略三已停用)→ 事件區(策略四、毛利率轉折 策略十五、基本面動能榜、負面新聞)→
   策略七 → 策略十(美日族群創新高)→ 行事曆 → 策略六(時事分析)→ 成效追蹤(只在每週五)
 每次正式推播會把各策略選出的股票記進 signals 表,每天更新滿 5/20 個交易日的報酬(見 tracking.py)
 
@@ -44,7 +44,7 @@ import feature3_news as s6_news  # noqa: E402
 import intersection  # noqa: E402
 import s1_s5_highs  # noqa: E402
 import s2_brokers  # noqa: E402
-import s3_limit_up  # noqa: E402
+# 策略三(漲停放空)已於 2026-10-19 停用:回測 20 日放空平均虧 9.6%、勝率 38%(scripts/reports/s3_limit_up.py 還留著,沒有被呼叫)
 import s4_revenue  # noqa: E402
 import s7_geo_brokers  # noqa: E402
 import s8_s9_institutional  # noqa: E402
@@ -126,7 +126,6 @@ def main():
     for name, mod in [
         ("策略一/五", s1_s5_highs),
         ("策略二", s2_brokers),
-        ("策略三", s3_limit_up),
         ("策略四", s4_revenue),
         ("策略七", s7_geo_brokers),
         ("策略八/九", s8_s9_institutional),
@@ -140,7 +139,7 @@ def main():
         ("行事曆", calendar_events),
     ]:
         run(name, mod)
-    try:  # 融資附註:策略一/五〔融資未增〕、策略三補融資使用率
+    try:  # 融資附註:策略一/五〔融資未增〕(策略三已停用,不再補融資使用率)
         margin_notes.apply_clean_tags(ctx, res)
         margin_notes.apply_s3_usage(ctx, res)
     except Exception as e:  # noqa: BLE001
@@ -166,7 +165,7 @@ def main():
         "s11", "s11_release",
         "s16",
         "s14", "s14_down",
-        "s3", "s13", "s13_cover", "e_knife",
+        "s13", "s13_cover", "e_knife",
         "s4", "s15", "s15_weak", "s15_mom", "s15_mom2", "s12",
         "s7", "s10", "calendar",
     ]
