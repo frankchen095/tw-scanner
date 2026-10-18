@@ -127,7 +127,7 @@ def _line0(res, key):
 
 # ---------- 各區塊 ----------
 
-CATS = [("策略一", "一", "近高"), ("策略二", "二", "分點"), ("策略五", "五", "創高"), ("策略七", "七", "地緣"), ("法人", "法人", "買超")]
+CATS = [("價格位置", "價格", "位置"), ("策略二", "二", "分點"), ("策略七", "七", "地緣"), ("法人", "法人", "買超")]
 
 
 def _intersection(ctx, res):
@@ -144,6 +144,8 @@ def _intersection(ctx, res):
             for key, _, _ in CATS:
                 on = key in r["cats"]
                 mark = '<span class="dot">●</span>' if on else ""
+                if on and key == "價格位置" and r.get("price_kind"):
+                    mark = f'<span class="chip {"hi" if r["price_kind"] == "創高" else "info"}">{r["price_kind"]}</span>'
                 if key == "策略二" and "策略二賣超榜" in r["conflicts"]:
                     mark = '<span class="chip sell">賣</span>' + mark
                 cells += f'<td class="c">{mark}</td>'
@@ -390,41 +392,89 @@ def _cal(ctx, res):
 
 
 def parse_s6(text):
-    blocks, cur = [], None
-    for raw in text.splitlines():
+    """舊格式(沒有 ◆ 分段)的解析,回傳 block 清單。新格式請用 parse_s6_sections。"""
+    return [b for sec in parse_s6_sections(text)["sections"] for b in sec["blocks"]]
+
+
+def parse_s6_sections(text):
+    """解析策略六輸出:◆ 段名 → 區塊(利多/利空、個股、原因);沒有 ◆ 就當成單一沒有段名的段。
+    回傳 {"sections": [{"name", "blocks", "none"}], "tomorrow": str|None, "notes": [str]}"""
+    sections, cur_sec, cur = [], None, None
+    tomorrow, notes = None, []
+
+    def sec(name=""):
+        nonlocal cur_sec
+        cur_sec = {"name": name, "blocks": [], "none": False}
+        sections.append(cur_sec)
+        return cur_sec
+
+    for raw in (text or "").splitlines():
         line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("◆"):
+            sec(line.lstrip("◆").strip())
+            cur = None
+            continue
+        if line.startswith("明日重要事件"):
+            tomorrow = re.sub(r"^明日重要事件[:：]\s*", "", line)
+            cur = None
+            continue
+        if line.startswith("(") or line.startswith("（"):
+            notes.append(line)
+            cur = None
+            continue
         m = re.match(r"^(利多|利空)[:：]\s*(.*)$", line)
         if m:
+            if cur_sec is None:
+                sec("")
             cur = {"dir": m.group(1), "industry": m.group(2), "stocks": [], "reason": ""}
-            blocks.append(cur)
+            cur_sec["blocks"].append(cur)
         elif cur is not None and (m := re.match(r"^個股[:：]\s*(.*)$", line)):
             cur["stocks"] = [t.strip() for t in re.split(r"[、,，]", m.group(1)) if t.strip() and t.strip() != "無"]
         elif cur is not None and (m := re.match(r"^原因[:：]\s*(.*)$", line)):
             cur["reason"] = m.group(1)
-        elif cur is not None and line and not line.startswith("(AI"):
+        elif cur is not None and not line.startswith("【"):
             cur["reason"] += line
-    return blocks
+        elif cur is None and cur_sec is not None and line in ("無", "无") and not cur_sec["blocks"]:
+            cur_sec["none"] = True
+    return {"sections": sections, "tomorrow": tomorrow, "notes": notes}
+
+
+def _s6_block(b):
+    tag = f'<span class="tag {"bull" if b["dir"] == "利多" else "bear"}">{b["dir"]}</span>'
+    chips = ""
+    for s in b["stocks"]:
+        m = re.match(r"^(.*?)\((\w+|\?)\)$", s)
+        chips += (f'<span class="sc">{esc(m.group(1))} <span class="code">{esc(m.group(2))}</span></span>' if m
+                  else f'<span class="sc">{esc(s)}</span>')
+    if not chips:
+        chips = '<span class="loc">無特定個股</span>'
+    return (f'<div class="item"><div><div class="t">{tag}{esc(b["industry"])}</div><div>{chips}</div></div>'
+            f'<div class="why">{esc(b["reason"])}</div></div>')
 
 
 def _s6(res_text):
-    sub = "AI零組件供應鏈+總經"
-    blocks = parse_s6(res_text or "")
-    if not blocks:
+    sub = "固定三段:供需訊號 / 總經大事 / 財報展望解讀(沒變化的段寫「無」)"
+    parsed = parse_s6_sections(res_text or "")
+    secs = [x for x in parsed["sections"] if x["blocks"] or x["name"]]
+    if not secs:
         raw = (res_text or "今天沒有時事分析").strip()
         return _section("策略六 時事分析", None, sub, f'<div class="msg">{esc(raw)}</div>')
-    items = ""
-    for b in blocks:
-        tag = f'<span class="tag {"bull" if b["dir"] == "利多" else "bear"}">{b["dir"]}</span>'
-        chips = ""
-        for s in b["stocks"]:
-            m = re.match(r"^(.*?)\((\w+|\?)\)$", s)
-            chips += (f'<span class="sc">{esc(m.group(1))} <span class="code">{esc(m.group(2))}</span></span>' if m
-                      else f'<span class="sc">{esc(s)}</span>')
-        if not chips:
-            chips = '<span class="loc">無特定個股</span>'
-        items += (f'<div class="item"><div><div class="t">{tag}{esc(b["industry"])}</div><div>{chips}</div></div>'
-                  f'<div class="why">{esc(b["reason"])}</div></div>')
-    return _section("策略六 時事分析", None, sub, f'<div class="news">{items}</div>')
+    body = ""
+    for x in secs:
+        head = f'<div class="ct" style="margin-top:6px">{esc(x["name"])}</div>' if x["name"] else ""
+        if x["blocks"]:
+            body += head + f'<div class="news">{"".join(_s6_block(b) for b in x["blocks"])}</div>'
+        else:
+            body += head + '<div class="msg">無</div>'
+    foot = ""
+    if parsed["tomorrow"]:
+        foot += f'<p class="foot"><b>明日重要事件:</b>{esc(parsed["tomorrow"])}</p>'
+    notes = [n for n in parsed["notes"] if not n.startswith("(AI")]
+    if notes:
+        foot += '<p class="foot">' + "<br>".join(esc(n) for n in notes) + "</p>"
+    return _section("策略六 時事分析", None, sub, body + foot)
 
 
 # ---------- 組裝 ----------

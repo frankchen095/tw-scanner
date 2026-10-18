@@ -2,11 +2,12 @@
 交集榜:當天同時出現在兩類以上「偏多」策略的股票
 
 偏多策略的分類(同類只算一次):
-  策略一            創新高策略(再漲3%內創60日新高)
+  價格位置          策略一(收盤低於60日高點、再漲3%內創新高)+ 策略五(今日創60日新高),合算一類。
+                    兩個條件互斥,一檔只會中一個,所以不分開算;顯示時標〔創高〕(策略五)或〔近高〕(策略一)
   策略二            前40大分點『今日買超榜』(不含近3日版)
-  策略五            今日創60日新高
-  策略七            地緣分點買進(第二階段才有)
+  策略七            地緣分點買進(同區分點或庫藏股分點)
   法人              策略八、策略九合算一類(避免自己跟自己重複)
+  (策略四營收公布是事件型,不納入交集榜)
 訊號衝突:交集榜裡的股票如果同時出現在策略三(漲停放空)或策略二的今日賣超榜,另外標出來。
 """
 
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from context import result  # noqa: E402
 
 TITLE = "【交集榜】同時出現在兩類以上偏多策略"
+PRICE = "價格位置"
 
 
 def categories(res):
@@ -29,12 +31,18 @@ def categories(res):
         return out
 
     return {
-        "策略一": picks("s1"),
+        PRICE: picks("s1", "s5"),
         "策略二": picks("s2_buy"),
-        "策略五": picks("s5"),
         "策略七": picks("s7"),
         "法人": picks("s8_1", "s8_5", "s9_trust", "s9_foreign"),
     }
+
+
+def price_kind(res, sid):
+    """價格位置這一類裡,這檔是『創高』(策略五)還是『近高』(策略一)"""
+    if "s5" in res and sid in res["s5"]["picks"]:
+        return "創高"
+    return "近高"
 
 
 def build(ctx, res):
@@ -54,13 +62,15 @@ def build(ctx, res):
     lines, out_rows = [], []
     for i, (sid, hit) in enumerate(rows, 1):
         conflicts = [n for n, ids in conflict_src.items() if sid in ids]
-        out_rows.append({"sid": sid, "cats": hit, "conflicts": conflicts})
+        kind = price_kind(res, sid) if PRICE in hit else None
+        out_rows.append({"sid": sid, "cats": hit, "conflicts": conflicts, "price_kind": kind})
+        shown = [f"{PRICE}〔{kind}〕" if n == PRICE else n for n in hit]
         warn = f" ⚠訊號衝突:同時在{'、'.join(conflicts)}" if conflicts else ""
-        lines.append(f"{i}. {ctx.label(sid)} {'+'.join(hit)}{warn}")
+        lines.append(f"{i}. {ctx.label(sid)} {'+'.join(shown)}{warn}")
     if not lines:
         lines = ["今天沒有同時出現在兩類以上偏多策略的股票"]
 
-    missing = [k for k in ("s1", "s2_buy", "s5", "s8_1") if k not in res]
+    missing = [k for k in ("s1", "s5", "s2_buy", "s8_1") if k not in res]
     if missing:
         lines.append(f"(注意:策略 {', '.join(missing)} 今天沒有結果,交集榜可能不完整)")
     return result("intersection", TITLE, lines, [sid for sid, _ in rows], rows=out_rows)

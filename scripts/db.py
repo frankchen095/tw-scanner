@@ -121,6 +121,11 @@ CREATE TABLE IF NOT EXISTS news_briefings (
     date TEXT PRIMARY KEY, content TEXT
 );
 
+-- 策略六的候選新聞(日期、來源、標題、連結),用來擋掉『連續兩天同標題』重複送給 AI
+CREATE TABLE IF NOT EXISTS news_candidates (
+    date TEXT, source TEXT, title TEXT, link TEXT, PRIMARY KEY (date, title)
+);
+
 -- 地緣分點(策略七 A):公司總部、券商分點的縣市 + 鄉鎮市區對照表,每月更新一次(見 geo.py)
 CREATE TABLE IF NOT EXISTS company_geo (
     stock_id TEXT PRIMARY KEY, name TEXT, address TEXT, city TEXT, district TEXT, updated TEXT
