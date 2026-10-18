@@ -191,8 +191,9 @@ def fetch_futu(hours=26, errors=None):
                 continue
         except Exception:  # noqa: BLE001
             t = None
-        rel = {str(s.get("stockCode") or s.get("code") or "") for s in (x.get("relatedStocks") or [])}
-        stock_hit = any(any(fs in c.upper() for fs in FUTU_STOCKS) for c in rel)
+        # relatedStocks 只是數字 id,股票代號在 quote[].code(例如 "NVDA.US")
+        codes = {str(q.get("code", "")).split(".")[0].upper() for q in (x.get("quote") or []) if isinstance(q, dict)}
+        stock_hit = bool(codes & set(FUTU_STOCKS))
         if not (stock_hit or _has_kw(title + content, JIN10_KEYWORDS)):
             continue
         out.append({"source": "富途", "title": title, "summary": content[:160],
