@@ -10,7 +10,9 @@
   (策略四營收公布是事件型,不納入交集榜)
 排序:先依『連續幾個推播日都在交集榜』多到少(≥2 日才標「連 N 日」),再依類別數、代號。
 連續天數只算正式推播的紀錄(dry-run 不記)。
-訊號衝突:交集榜裡的股票如果同時出現在策略三(漲停放空)或策略二的今日賣超榜,另外標出來。
+訊號衝突:交集榜裡的股票如果同時出現在空方榜,另外標出來:策略三(漲停放空)、策略二今日賣超榜、
+策略十三借券賣出餘額大增榜、散戶接刀榜、策略十六內部人申報轉讓(一般/鉅額交易)。
+(質押〔設質〕類別和〔解質〕衝突來源:需要每日設質/解質申報資料,官方只有月報,沒有做,見 README。)
 """
 
 import sys
@@ -53,6 +55,9 @@ def build(ctx, res):
     conflict_src = {
         "策略三(漲停放空)": set(res["s3"]["picks"]) if "s3" in res else set(),
         "策略二賣超榜": set(res["s2_sell"]["picks"]) if "s2_sell" in res else set(),
+        "借券大增榜": set(res["s13"]["picks"]) if "s13" in res else set(),
+        "散戶接刀榜": set(res["e_knife"]["picks"]) if "e_knife" in res else set(),
+        "申報轉讓榜": set(res["s16"]["picks"]) if "s16" in res else set(),
     }
     all_ids = set().union(*cats.values())
     multi = {}

@@ -18,6 +18,8 @@ class Context:
         self.conn = conn
         self.day = day
         self.risk = risk
+        self.dry_run = False   # main.py 依 --dry-run 設定;有『只記錄一次』行為的策略(動能榜名單)用它判斷
+        self.show_all = False  # --show-all:把『只在特定日子才出現』的段落(集保週資料、動能榜)強制顯示出來
         self.mv, self.mv_date = get_market_values_latest(conn, day)
         self.mv_note = (
             f"市值門檻(>500億)用的是 {self.mv_date} 的市值表(FinMind 今天的市值表還沒更新)"

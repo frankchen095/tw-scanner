@@ -68,6 +68,7 @@ SYSTEM_PROMPT = """\
 來自論壇、社群、匿名爆料或轉載、沒有公司公告或主流媒體證實的消息,可以列,但一定要在原因最後標〔未證實〕,\
 並附出處(網站名稱 + 網址)。已有公司公告或主流媒體證實的不用附出處。
 - 不確定的數字不要寫,不要編造公司、數字或網址。
+- 每個區塊的「原因」最後要標這則消息的來源標記,讓使用者能對回候選清單:用候選清單裡的標記 〔金十〕〔WSJ〕〔GoogleNews〕〔富途〕;如果是你自己 web_search 找到的、不在候選清單裡,標〔搜尋〕。同一個區塊用了多個來源就都標。
 
 # 三段內容(順序固定,三段都要出現)
 
@@ -245,15 +246,17 @@ def collect_candidates(conn, report_date, errors):
     wsj, wsj_total = news_sources.fetch_wsj(LOOKBACK_HOURS, errors)
     futu, futu_total = news_sources.fetch_futu(LOOKBACK_HOURS, errors)
     futu_dedup = news_sources.dedup_futu_against_jin10(futu, jin)
-    stats = {
-        "GoogleNews": (len(google), len(g2)),
-        "金十": (jin_total, len(jin)),
-        "WSJ": (wsj_total, len(wsj)),
-        "富途": (futu_total, len(futu_dedup)),
-    }
     lim = news_sources.LIMITS
     items = g2[: lim["GoogleNews"]] + jin[: lim["金十"]] + wsj[: lim["WSJ"]] + futu_dedup[: lim["富途"]]
     items = news_sources.save_candidates(conn, report_date, items)
+    used = {k: sum(1 for it in items if it["source"] == k) for k in lim}
+    # (來源抓到的則數 → 關鍵字過濾後 → 實際送給 AI 的則數)
+    stats = {
+        "GoogleNews": (len(google), len(g2), used["GoogleNews"]),
+        "金十": (jin_total, len(jin), used["金十"]),
+        "WSJ": (wsj_total, len(wsj), used["WSJ"]),
+        "富途": (futu_total, len(futu_dedup), used["富途"]),
+    }
     tomorrow = news_sources.fetch_jin10_calendar(errors) if news_sources.JIN10_CALENDAR else None
     return items, stats, tomorrow
 
@@ -270,7 +273,7 @@ def format_candidates(items):
 def build(conn, report_date):
     errors = []
     items, stats, tomorrow = collect_candidates(conn, report_date, errors)
-    print("  [策略六] 各來源(抓到 → 過濾後):" + "、".join(f"{k} {a}→{b}" for k, (a, b) in stats.items()))
+    print("  [策略六] 各來源(抓到 → 關鍵字過濾後 → 送給 AI):" + "、".join(f"{k} {a}→{b}→{c}" for k, (a, b, c) in stats.items()))
 
     if not items:
         note = ("(" + ";".join(errors) + ")") if errors else ""
@@ -309,7 +312,7 @@ def build(conn, report_date):
     tail = []
     if tomorrow:
         tail.append("明日重要事件:" + ";".join(tomorrow))
-    src = "、".join(f"{k} {b}則" for k, (_, b) in stats.items())
+    src = "、".join(f"{k} {c}則" for k, (_, _, c) in stats.items())
     tail.append(f"(候選來源:{src})")
     if errors:
         tail.append("(本日來源問題:" + ";".join(errors) + ")")

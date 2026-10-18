@@ -1,0 +1,42 @@
+name: 測試-完整報表(不推播不存資料)
+
+# 只能手動觸發。跑完整流程(抓資料、所有策略、PDF),--dry-run --show-all:不推播 LINE、
+# 不記錄訊號、不把資料存回 repo;PDF 只存在這次執行的暫存空間,會當成 artifact 讓你下載。
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "報表日期 YYYY-MM-DD(留空 = 今天;假日請填最近一個交易日)"
+        type: string
+        default: ""
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: 安裝中文字型
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+
+      - name: 完整 dry-run(--show-all:集保週資料、動能榜也強制顯示)
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/main.py --dry-run --show-all ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-pdf
+          path: out/*.pdf
+          if-no-files-found: ignore

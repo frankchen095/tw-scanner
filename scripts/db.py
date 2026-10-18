@@ -126,6 +126,69 @@ CREATE TABLE IF NOT EXISTS news_candidates (
     date TEXT, source TEXT, title TEXT, link TEXT, PRIMARY KEY (date, title)
 );
 
+-- 融資融券日資料(策略 E:融資餘額 vs 股價背離):融資餘額單位=張
+CREATE TABLE IF NOT EXISTS margin_daily (
+    date TEXT, stock_id TEXT, margin_bal REAL, margin_prev REAL, margin_limit REAL,
+    short_bal REAL, PRIMARY KEY (date, stock_id)
+);
+
+-- 借券賣出餘額日資料(策略 D):單位=股
+CREATE TABLE IF NOT EXISTS short_balance_daily (
+    date TEXT, stock_id TEXT, sbl_bal REAL, sbl_prev REAL, sbl_quota REAL,
+    PRIMARY KEY (date, stock_id)
+);
+
+-- 集保股權分散(策略 F),每週一筆;只存加總後的大戶/散戶持股比。first_seen = 我們第一次抓到這週資料的日期
+CREATE TABLE IF NOT EXISTS holding_dist_weekly (
+    date TEXT, stock_id TEXT, big_pct REAL, retail_pct REAL, first_seen TEXT,
+    PRIMARY KEY (date, stock_id)
+);
+
+-- 季報損益表(策略 G):date = 財報季底日;first_seen = 我們第一次在 FinMind 看到這一季的日期
+CREATE TABLE IF NOT EXISTS financials_quarterly (
+    date TEXT, stock_id TEXT, revenue REAL, gross_profit REAL, op_income REAL, first_seen TEXT,
+    PRIMARY KEY (date, stock_id)
+);
+
+-- 內部人持股轉讓事前申報(策略 J,每日申報表,證交所/櫃買 OpenAPI 每天只給當天那一份,所以自己每天存)
+CREATE TABLE IF NOT EXISTS insider_transfer_daily (
+    date TEXT, stock_id TEXT, name TEXT, identity TEXT, method TEXT, shares REAL,
+    held_shares REAL, after_shares REAL, period TEXT, market TEXT,
+    PRIMARY KEY (date, stock_id, name, method, shares)
+);
+
+-- 董監事持股/設質月報(風險標記〔質押比高〕),每月一份;只存每家公司董監整體加總
+CREATE TABLE IF NOT EXISTS insider_pledge_monthly (
+    ym TEXT, stock_id TEXT, held_shares REAL, pledged_shares REAL, pledge_ratio REAL, updated TEXT,
+    PRIMARY KEY (ym, stock_id)
+);
+
+-- 全市場月營收(近 15 個月,基本面動能榜算年增用;ym = 營收年月 YYYYMM)
+CREATE TABLE IF NOT EXISTS month_revenue_all (
+    stock_id TEXT, ym INTEGER, revenue REAL, PRIMARY KEY (stock_id, ym)
+);
+
+-- 基本面動能榜每次推播的名單(算『新進榜/掉出榜/連 N 期』用);tier = 三升 / 二升
+CREATE TABLE IF NOT EXISTS momentum_snapshots (
+    date TEXT, tier TEXT, stock_id TEXT, PRIMARY KEY (date, tier, stock_id)
+);
+
+-- 族群共振(K 項)每天達標的族群與成員,算『連 N 日』用(正式推播才記)
+CREATE TABLE IF NOT EXISTS group_signals (
+    date TEXT, group_name TEXT, stock_id TEXT, PRIMARY KEY (date, group_name, stock_id)
+);
+
+-- 回測訊號(L 項):跟正式推播的 signals 分開
+CREATE TABLE IF NOT EXISTS backtest_signals (
+    date TEXT, strategy TEXT, stock_id TEXT, direction TEXT,
+    PRIMARY KEY (date, strategy, stock_id)
+);
+CREATE TABLE IF NOT EXISTS backtest_returns (
+    date TEXT, strategy TEXT, stock_id TEXT, horizon INTEGER, entry_date TEXT, entry_price REAL,
+    exit_date TEXT, exit_price REAL, ret REAL, index_ret REAL,
+    PRIMARY KEY (date, strategy, stock_id, horizon)
+);
+
 -- 地緣分點(策略七 A):公司總部、券商分點的縣市 + 鄉鎮市區對照表,每月更新一次(見 geo.py)
 CREATE TABLE IF NOT EXISTS company_geo (
     stock_id TEXT PRIMARY KEY, name TEXT, address TEXT, city TEXT, district TEXT, updated TEXT
@@ -238,6 +301,8 @@ KEEP_DAYS = {
     "daily_dama": 15,
     "daily_limitup": 30,
     "daily_market_value": 10,
+    "margin_daily": 30,
+    "short_balance_daily": 30,
 }
 
 
