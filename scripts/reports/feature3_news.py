@@ -116,7 +116,7 @@ SYSTEM_PROMPT = """\
 - 三段都沒有值得寫的消息時,只輸出「今天沒有重大新進展」。"""
 
 
-def _fetch_rss(query):
+def _fetch_rss(query, limit=MAX_ITEMS_PER_QUERY):
     url = (
         "https://news.google.com/rss/search?q="
         + urllib.parse.quote(query)
@@ -135,7 +135,7 @@ def _fetch_rss(query):
     except ET.ParseError:
         return []
     items = []
-    for item in root.findall(".//item")[:MAX_ITEMS_PER_QUERY]:
+    for item in root.findall(".//item")[:limit]:
         items.append(
             {
                 "title": item.findtext("title", "") or "",
@@ -254,7 +254,7 @@ def collect_candidates(conn, report_date, errors):
     lim = news_sources.LIMITS
     items = g2[: lim["GoogleNews"]] + jin[: lim["金十"]] + wsj[: lim["WSJ"]] + futu_dedup[: lim["富途"]]
     items = news_sources.save_candidates(conn, report_date, items)
-    tomorrow = news_sources.fetch_jin10_calendar(errors)
+    tomorrow = news_sources.fetch_jin10_calendar(errors) if news_sources.JIN10_CALENDAR else None
     return items, stats, tomorrow
 
 

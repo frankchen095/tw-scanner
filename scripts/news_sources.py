@@ -52,6 +52,9 @@ WSJ_FEEDS = {
 # 富途:只抓這幾檔個股相關(relatedStocks 比對)+ 重要總經關鍵字(沿用金十的清單)
 FUTU_STOCKS = ["AAPL", "NVDA", "TSM", "MU", "AMD"]
 
+# 金十財經日曆(cdn-rili.jin10.com)的網域在本機和 GitHub Actions 都解析不到(2026-10-18 實測),
+# 所以預設關閉,不要每天在報表上報錯;函式保留,哪天網域恢復把這個改 True 即可
+JIN10_CALENDAR = False
 JIN10_MAX_PAGES = 40
 FUTU_MAX_PAGES = 8
 JIN10_HEADERS = dict(UA, **{"x-app-id": "bVBF4FyRTn5NJF5n", "x-version": "1.0.0",

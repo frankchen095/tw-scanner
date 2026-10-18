@@ -102,6 +102,11 @@ def _amt(v, unit=1e8, signed=True, digits=2):
     return f'<span class="{cls}">{txt}</span>'
 
 
+def _streak_chip(r):
+    n = r.get("streak", 1)
+    return f'<span class="chip warn">連{n}日</span>' if n >= 2 else ""
+
+
 def _bar(frac, color):
     return f'<span class="bar {color}"><i style="width:{max(0, min(1, frac)) * 100:.0f}%"></i></span>'
 
@@ -150,6 +155,8 @@ def _intersection(ctx, res):
                     mark = '<span class="chip sell">賣</span>' + mark
                 cells += f'<td class="c">{mark}</td>'
             short = '<span class="chip short">空</span>' if any("策略三" in c for c in r["conflicts"]) else ""
+            if r.get("streak", 1) >= 2:
+                short += f'<span class="chip warn">連{r["streak"]}日</span>'
             body += (f'<tr class="{"conf" if conf else ""}"><td class="n">{i}</td>'
                      f'<td class="l">{_stock(ctx, r["sid"], short)}</td>{cells}</tr>')
         return (f'<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th>{head}</tr></thead>'
@@ -192,7 +199,7 @@ def _s2(ctx, res):
         rows = _rows_of(res, key)
         mx = max((abs(r["net"]) for r in rows), default=1) or 1
         body = "".join(
-            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"])}</td>'
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"], _streak_chip(r))}</td>'
             f'<td>{_amt(r["net"])}{_bar(abs(r["net"]) / mx, color)}</td><td>{r["n"]}</td></tr>'
             for i, r in enumerate(rows, 1)) or '<tr><td class="l" colspan="4">沒有符合的股票</td></tr>'
         return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'

@@ -138,6 +138,38 @@ def update_returns(conn, day):
     return len(out), None
 
 
+def _streak_split(conn):
+    """交集榜每一筆訊號,算出『當天是連續第幾個推播日在榜上』,分成 連2日以上 / 只出現1日 兩組各自的成績。
+    連續天數的算法跟報表一樣(只看 signals 表裡有記錄的推播日)。回傳 [文字行]。"""
+    sig = pd.read_sql("SELECT date, stock_id FROM signals WHERE strategy='intersection'", conn)
+    if sig.empty:
+        return []
+    dates = sorted(pd.read_sql("SELECT DISTINCT date FROM signals", conn)["date"])
+    pos = {d: i for i, d in enumerate(dates)}
+    have = set(zip(sig["date"], sig["stock_id"]))
+    streak = {}
+    for d, sid in have:
+        n, i = 1, pos[d] - 1
+        while i >= 0 and (dates[i], sid) in have:
+            n += 1
+            i -= 1
+        streak[(d, sid)] = n
+    ret = pd.read_sql("SELECT date, stock_id, horizon, ret, index_ret FROM signal_returns WHERE strategy='intersection'", conn)
+    if ret.empty:
+        return ["交集榜持續天數對照:還沒有滿 5 個交易日的交集榜訊號"]
+    ret["streak"] = [streak.get((d, sid), 1) for d, sid in zip(ret["date"], ret["stock_id"])]
+    lines = ["交集榜持續天數對照(連 2 日以上 vs 只出現 1 日):"]
+    for h in HORIZONS:
+        for label, sel in (("連2日以上", ret["streak"] >= 2), ("只出現1日", ret["streak"] < 2)):
+            r = ret[sel & (ret["horizon"] == h)]
+            if r.empty:
+                lines.append(f"  {h}日 {label}:還沒有成績")
+            else:
+                lines.append(f"  {h}日 {label}:{len(r)} 筆,平均 {r['ret'].mean() * 100:+.1f}%,"
+                             f"勝率 {(r['ret'] > 0).mean() * 100:.0f}%(大盤同期 {r['index_ret'].mean() * 100:+.1f}%)")
+    return lines
+
+
 def summary_text(conn, day):
     """每週五推播的彙總文字。"""
     title = "【成效追蹤】"
