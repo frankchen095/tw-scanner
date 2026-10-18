@@ -52,6 +52,8 @@ WSJ_FEEDS = {
 # 富途:只抓這幾檔個股相關(relatedStocks 比對)+ 重要總經關鍵字(沿用金十的清單)
 FUTU_STOCKS = ["AAPL", "NVDA", "TSM", "MU", "AMD"]
 
+JIN10_MAX_PAGES = 40
+FUTU_MAX_PAGES = 8
 JIN10_HEADERS = dict(UA, **{"x-app-id": "bVBF4FyRTn5NJF5n", "x-version": "1.0.0",
                             "Origin": "https://www.jin10.com", "Referer": "https://www.jin10.com/"})
 
@@ -69,13 +71,32 @@ def _clean(s):
 def fetch_jin10(hours=26, errors=None):
     """金十快訊,關鍵字過濾後的 [{...}]。快訊只有『【標題】內文』一段,標題取【】內、摘要取內文前 160 字。"""
     errors = errors if errors is not None else []
-    try:
-        r = requests.get("https://flash-api.jin10.com/get_flash_list", params={"channel": "-8200", "vip": "1"},
-                         headers=JIN10_HEADERS, timeout=25)
-        r.raise_for_status()
-        rows = r.json().get("data") or []
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"金十快訊:{str(e)[:80]}")
+    # 一頁只有約 20 則,用 max_time 往前翻頁,翻到超過回溯時間或 MAX_PAGES 為止
+    rows, max_time = [], None
+    cutoff0 = datetime.now(TAIPEI) - timedelta(hours=hours)
+    for _ in range(JIN10_MAX_PAGES):
+        params = {"channel": "-8200", "vip": "1"}
+        if max_time:
+            params["max_time"] = max_time
+        try:
+            r = requests.get("https://flash-api.jin10.com/get_flash_list", params=params,
+                             headers=JIN10_HEADERS, timeout=25)
+            r.raise_for_status()
+            page = r.json().get("data") or []
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"金十快訊:{str(e)[:80]}")
+            break
+        if not page:
+            break
+        rows += page
+        max_time = page[-1].get("time")
+        try:
+            if datetime.strptime(max_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TAIPEI) < cutoff0:
+                break
+        except Exception:  # noqa: BLE001
+            break
+        time.sleep(0.2)
+    if not rows:
         return [], 0
     out, total = [], 0
     cutoff = datetime.now(TAIPEI) - timedelta(hours=hours)
@@ -172,13 +193,32 @@ def fetch_wsj(hours=26, errors=None):
 def fetch_futu(hours=26, errors=None):
     """富途 7×24 快訊:只留相關個股是 FUTU_STOCKS 的,或標題命中金十那份總經關鍵字的。"""
     errors = errors if errors is not None else []
-    try:
-        r = requests.get("https://news.futunn.com/news-site-api/main/get-flash-list", params={"pageSize": 50},
-                         headers=dict(UA, Referer="https://news.futunn.com/", Accept="application/json"), timeout=25)
-        r.raise_for_status()
-        news = r.json()["data"]["data"]["news"]
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"富途快訊:{str(e)[:80]}")
+    news, seq = [], None
+    cutoff0 = datetime.now(TAIPEI) - timedelta(hours=hours)
+    for _ in range(FUTU_MAX_PAGES):
+        params = {"pageSize": 50}
+        if seq:
+            params["seqMark"] = seq
+        try:
+            r = requests.get("https://news.futunn.com/news-site-api/main/get-flash-list", params=params,
+                             headers=dict(UA, Referer="https://news.futunn.com/", Accept="application/json"), timeout=25)
+            r.raise_for_status()
+            d = r.json()["data"]["data"]
+            page = d["news"]
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"富途快訊:{str(e)[:80]}")
+            break
+        news += page
+        seq = d.get("seqMark")
+        if not page or not d.get("hasMore") or not seq:
+            break
+        try:
+            if datetime.fromtimestamp(int(page[-1]["time"]), TAIPEI) < cutoff0:
+                break
+        except Exception:  # noqa: BLE001
+            break
+        time.sleep(0.2)
+    if not news:
         return [], 0
     out = []
     cutoff = datetime.now(TAIPEI) - timedelta(hours=hours)
