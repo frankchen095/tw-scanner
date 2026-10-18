@@ -2,12 +2,17 @@
 交集榜:當天同時出現在兩類以上「偏多」策略的股票
 
 偏多策略的分類(同類只算一次):
-  策略一            創新高策略(再漲3%內創60日新高)
+  價格位置          策略一(收盤低於60日高點、再漲3%內創新高)+ 策略五(今日創60日新高),合算一類。
+                    兩個條件互斥,一檔只會中一個,所以不分開算;顯示時標〔創高〕(策略五)或〔近高〕(策略一)
   策略二            前40大分點『今日買超榜』(不含近3日版)
-  策略五            今日創60日新高
-  策略七            地緣分點買進(第二階段才有)
+  策略七            地緣分點買進(同區分點或庫藏股分點)
   法人              策略八、策略九合算一類(避免自己跟自己重複)
-訊號衝突:交集榜裡的股票如果同時出現在策略三(漲停放空)或策略二的今日賣超榜,另外標出來。
+  質押              策略十一(月頻)市值>500億、當月〔設質〕的股票
+  (策略四營收公布是事件型,不納入交集榜)
+排序:先依『連續幾個推播日都在交集榜』多到少(≥2 日才標「連 N 日」),再依類別數、代號。
+連續天數只算正式推播的紀錄(dry-run 不記)。
+訊號衝突:交集榜裡的股票如果同時出現在空方榜,另外標出來:策略三(漲停放空)、策略二今日賣超榜、
+策略十三借券賣出餘額大增榜、散戶接刀榜、策略十六內部人申報轉讓(一般/鉅額交易)、策略十一〔解質〕榜(月頻)。
 """
 
 import sys
@@ -15,11 +20,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from context import result  # noqa: E402
+from helpers import signal_streaks  # noqa: E402
 
 TITLE = "【交集榜】同時出現在兩類以上偏多策略"
+PRICE = "價格位置"
 
 
-def categories(res):
+def categories(res, big=frozenset()):
     """從各策略結果整理出 {類別名稱: 股票代號集合}。res 是 {策略key: result}。"""
 
     def picks(*keys):
@@ -29,19 +36,31 @@ def categories(res):
         return out
 
     return {
-        "策略一": picks("s1"),
+        PRICE: picks("s1", "s5"),
         "策略二": picks("s2_buy"),
-        "策略五": picks("s5"),
         "策略七": picks("s7"),
         "法人": picks("s8_1", "s8_5", "s9_trust", "s9_foreign"),
+        # 質押:市值>500億且當月〔設質〕(月頻;沒有新一個月資料的日子 s11 不存在,這一類就是空的)
+        "質押": picks("s11") & big,
     }
 
 
+def price_kind(res, sid):
+    """價格位置這一類裡,這檔是『創高』(策略五)還是『近高』(策略一)"""
+    if "s5" in res and sid in res["s5"]["picks"]:
+        return "創高"
+    return "近高"
+
+
 def build(ctx, res):
-    cats = categories(res)
+    cats = categories(res, ctx.big or frozenset())
     conflict_src = {
         "策略三(漲停放空)": set(res["s3"]["picks"]) if "s3" in res else set(),
         "策略二賣超榜": set(res["s2_sell"]["picks"]) if "s2_sell" in res else set(),
+        "借券大增榜": set(res["s13"]["picks"]) if "s13" in res else set(),
+        "散戶接刀榜": set(res["e_knife"]["picks"]) if "e_knife" in res else set(),
+        "申報轉讓榜": set(res["s16"]["picks"]) if "s16" in res else set(),
+        "解質榜": set(res["s11_release"]["picks"]) if "s11_release" in res else set(),
     }
     all_ids = set().union(*cats.values())
     multi = {}
@@ -50,17 +69,23 @@ def build(ctx, res):
         if len(hit) >= 2:
             multi[sid] = hit
 
-    rows = sorted(multi.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    streaks = signal_streaks(ctx.conn, ctx.day, "intersection", list(multi))
+    # 排序:先連續天數多到少,再類別數多到少,再代號
+    rows = sorted(multi.items(), key=lambda kv: (-streaks.get(kv[0], 1), -len(kv[1]), kv[0]))
     lines, out_rows = [], []
     for i, (sid, hit) in enumerate(rows, 1):
         conflicts = [n for n, ids in conflict_src.items() if sid in ids]
-        out_rows.append({"sid": sid, "cats": hit, "conflicts": conflicts})
+        kind = price_kind(res, sid) if PRICE in hit else None
+        streak = streaks.get(sid, 1)
+        out_rows.append({"sid": sid, "cats": hit, "conflicts": conflicts, "price_kind": kind, "streak": streak})
+        shown = [f"{PRICE}〔{kind}〕" if name == PRICE else name for name in hit]
         warn = f" ⚠訊號衝突:同時在{'、'.join(conflicts)}" if conflicts else ""
-        lines.append(f"{i}. {ctx.label(sid)} {'+'.join(hit)}{warn}")
+        run = f" 連 {streak} 日" if streak >= 2 else ""
+        lines.append(f"{i}. {ctx.label(sid)} {'+'.join(shown)}{run}{warn}")
     if not lines:
         lines = ["今天沒有同時出現在兩類以上偏多策略的股票"]
 
-    missing = [k for k in ("s1", "s2_buy", "s5", "s8_1") if k not in res]
+    missing = [k for k in ("s1", "s5", "s2_buy", "s8_1") if k not in res]
     if missing:
         lines.append(f"(注意:策略 {', '.join(missing)} 今天沒有結果,交集榜可能不完整)")
     return result("intersection", TITLE, lines, [sid for sid, _ in rows], rows=out_rows)

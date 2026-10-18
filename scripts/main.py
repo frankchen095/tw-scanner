@@ -1,7 +1,11 @@
 """
 main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LINE 推播
 
-推播順序:交集榜 → 策略一~五 → 策略七 → 策略八、九 → 策略六(時事分析)→ 成效追蹤(只在每週五)
+推播順序(每段標 §編號,方便在手機上找):
+  §1 交集榜 → §2 族群訊號 → 價格位置(策略一、五)→ 策略二 → 法人(策略八、九)→ 質押(策略十一,月頻,只在新一個月資料入庫日)→
+  內部人申報轉讓(策略十六)→ 大戶持股比(策略十四,只在集保新一週資料入庫日)→
+  空方區(策略三、借券 策略十三、散戶接刀榜)→ 事件區(策略四、毛利率轉折 策略十五、基本面動能榜、負面新聞)→
+  策略七 → 策略十(美日族群創新高)→ 行事曆 → 策略六(時事分析)→ 成效追蹤(只在每週五)
 每次正式推播會把各策略選出的股票記進 signals 表,每天更新滿 5/20 個交易日的報酬(見 tracking.py)
 
 舊的 功能1(大摩+法人排行)、功能2(外資投信同買)、功能4(帶量突破盤整)已停用,
@@ -14,6 +18,7 @@ main.py —— 主程式:抓資料 → 算各策略 → 組成報表 → 用 LIN
     python scripts/main.py --date 2026-10-06 --dry-run    # 不推播,只印在畫面上看結果
     python scripts/main.py --dry-run --no-news            # 跳過策略六(不需要 ANTHROPIC_API_KEY)
     python scripts/main.py --dry-run --show-performance   # 不是週五也把成效追蹤彙總印出來
+    python scripts/main.py --dry-run --show-all           # 『只在特定日子才出現』的段落(集保週資料、動能榜)也強制顯示
 """
 
 import argparse
@@ -44,7 +49,15 @@ import s4_revenue  # noqa: E402
 import s7_geo_brokers  # noqa: E402
 import s8_s9_institutional  # noqa: E402
 import s10_global_highs  # noqa: E402
+import s11_pledge  # noqa: E402
 import calendar_events  # noqa: E402
+import group_resonance  # noqa: E402
+import margin_notes  # noqa: E402
+import s12_negative_news  # noqa: E402
+import s13_short_lending  # noqa: E402
+import s14_big_holders  # noqa: E402
+import s15_margin_turn  # noqa: E402
+import s16_insider_transfer  # noqa: E402
 
 DISCLAIMER = "以上為程式依公開資料自動整理的篩選結果,不是投資建議;歷史命中率不代表未來表現。"
 
@@ -61,6 +74,7 @@ def main():
     parser.add_argument("--no-news", action="store_true", help="跳過策略六(時事分析),測試時省時間")
     parser.add_argument("--force", action="store_true", help="這天已經推播過也再推一次")
     parser.add_argument("--no-pdf", action="store_true", help="不產生 PDF,直接用文字訊息推播")
+    parser.add_argument("--show-all", action="store_true", help="集保週資料、動能榜這種只在特定日子出現的段落也強制顯示")
     parser.add_argument("--show-performance", action="store_true", help="不是週五也附上成效追蹤彙總")
     args = parser.parse_args()
     day = args.date
@@ -90,7 +104,9 @@ def main():
         f"  處置 {len(risk.disposition)} 檔、注意 {len(risk.attention)} 檔、"
         f"未來5日除權息 {len(risk.exdiv)} 檔、未來5日法說 {len(risk.law_conf)} 檔、融券限制 {len(risk.short_status)} 檔"
     )
+    risk.load_db(conn, s14_big_holders.weekly_flags)  # 〔大戶增〕〔大戶減〕〔質押比高〕
     ctx = Context(conn, day, risk)
+    ctx.dry_run, ctx.show_all = args.dry_run, args.show_all
     missing_note = None
     if ctx.big is None:
         missing_note = ("FinMind 完全沒有可用的市值表資料,所以需要『市值>500億』條件的策略"
@@ -98,6 +114,15 @@ def main():
 
     print(f"\n=== 計算 {day} 的各策略 ===")
     res, failures = {}, []
+
+    def run(name, mod, *extra):
+        try:
+            print(f"  {name}…")
+            res.update(mod.build(ctx, *extra))
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            failures.append(f"{name} 執行失敗:{str(e)[:150]}")
+
     for name, mod in [
         ("策略一/五", s1_s5_highs),
         ("策略二", s2_brokers),
@@ -105,21 +130,52 @@ def main():
         ("策略四", s4_revenue),
         ("策略七", s7_geo_brokers),
         ("策略八/九", s8_s9_institutional),
+        ("散戶接刀榜", margin_notes),
+        ("策略十三 借券", s13_short_lending),
+        ("策略十四 大戶持股", s14_big_holders),
+        ("策略十五 財報/動能榜", s15_margin_turn),
+        ("策略十一 質押(月頻)", s11_pledge),
+        ("策略十六 內部人轉讓", s16_insider_transfer),
         ("策略十", s10_global_highs),
         ("行事曆", calendar_events),
     ]:
-        try:
-            print(f"  {name}…")
-            res.update(mod.build(ctx))
-        except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
-            failures.append(f"{name} 執行失敗:{str(e)[:150]}")
+        run(name, mod)
+    try:  # 融資附註:策略一/五〔融資未增〕、策略三補融資使用率
+        margin_notes.apply_clean_tags(ctx, res)
+        margin_notes.apply_s3_usage(ctx, res)
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        failures.append(f"融資附註執行失敗:{str(e)[:150]}")
+    if not args.no_news:
+        run("策略十二 負面新聞", s12_negative_news)
 
     inter = intersection.build(ctx, res)
-    sections = [f"台股盤後掃描 {day}", render(inter)]
-    for key in ("s1", "s2_buy", "s2_sell", "s2_buy3", "s3", "s4", "s5", "s7", "s8_1", "s8_5", "s9_trust", "s9_foreign", "s10", "calendar"):
+    try:
+        margin_notes.apply_clean_tags(ctx, {"intersection": inter})
+    except Exception:  # noqa: BLE001
+        pass
+    res["intersection"] = inter
+    run("族群訊號", group_resonance, res)
+
+    # 推播順序(章節編號會自動加在每段標題前)
+    ORDER = [
+        "intersection", "group",
+        "s1", "s5",
+        "s2_buy", "s2_sell", "s2_buy3",
+        "s8_1", "s8_5", "s9_trust", "s9_foreign",
+        "s11", "s11_release",
+        "s16",
+        "s14", "s14_down",
+        "s3", "s13", "s13_cover", "e_knife",
+        "s4", "s15", "s15_weak", "s15_mom", "s15_mom2", "s12",
+        "s7", "s10", "calendar",
+    ]
+    sections = [f"台股盤後掃描 {day}"]
+    n_sec = 0
+    for key in ORDER:
         if key in res:
-            sections.append(render(res[key]))
+            n_sec += 1
+            sections.append(f"§{n_sec} " + render(res[key]))
 
     s6_sections = []
     perf_text = None
@@ -127,7 +183,8 @@ def main():
         print("  策略六(時事分析)…")
         try:
             s6_sections = s6_news.build(conn, day)
-            sections += s6_sections
+            n_sec += 1
+            sections += [f"§{n_sec} " + x for x in s6_sections]
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             failures.append(f"策略六 執行失敗:{str(e)[:150]}")
@@ -135,7 +192,8 @@ def main():
     # 成效追蹤:正式推播才記錄今天的訊號(dry-run 不記,免得測試資料混進去);每天更新到期的報酬
     if not args.dry_run:
         try:
-            print(f"  成效追蹤:記錄 {record_signals(conn, day, {**res, 'intersection': inter})} 筆訊號")
+            print(f"  成效追蹤:記錄 {record_signals(conn, day, res)} 筆訊號")
+            group_resonance.record_groups(conn, day, res)
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             failures.append(f"成效追蹤記錄訊號失敗:{str(e)[:150]}")
@@ -146,7 +204,8 @@ def main():
             risk.errors.append(err)
         if date.fromisoformat(day).weekday() == 4 or args.show_performance:
             perf_text = summary_text(conn, day)
-            sections.append(perf_text)
+            n_sec += 1
+            sections.append(f"§{n_sec} " + perf_text)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
         failures.append(f"成效追蹤更新失敗:{str(e)[:150]}")
@@ -170,7 +229,7 @@ def main():
     pdf_url, pdf_summary = None, None
     if not args.no_pdf:
         try:
-            full = {**res, "intersection": inter}
+            full = res
             pdf_summary = pdf_report.summary_text(ctx, full)
             html = pdf_report.build_html(
                 ctx, day, full, s6_text="\n".join(s6_sections) or None, perf_text=perf_text, notes=notes,

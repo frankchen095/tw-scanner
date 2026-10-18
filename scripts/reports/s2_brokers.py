@@ -18,7 +18,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from context import nodata, result  # noqa: E402
 from db import TOP40_TRADER_IDS, TOP_N_TRACKED_BROKERS, TRACKED_BROKERS  # noqa: E402
-from helpers import fmt_wan, recent_dates  # noqa: E402
+from helpers import fmt_wan, recent_dates, signal_streaks  # noqa: E402
 
 TOP_N = 10
 T_BUY = f"【策略二:前{TOP_N_TRACKED_BROKERS}大分點 今日合計買超 Top{TOP_N}】"
@@ -48,7 +48,7 @@ def _by_stock(conn, dates):
     ).reset_index()
 
 
-def _lines(ctx, df, side):
+def _lines(ctx, df, side, streaks=None):
     if df is None or df.empty:
         return [], [], []
     if side == "buy":
@@ -57,8 +57,11 @@ def _lines(ctx, df, side):
     else:
         d = df[df["net"] < 0].sort_values("net").head(TOP_N)
         fmt = lambda r: f"{fmt_wan(r.net, signed=True)} ({r.n_sell}組賣超)"  # noqa: E731
-    lines = [f"{i}. {ctx.label(r.stock_id)} {fmt(r)}" for i, r in enumerate(d.itertuples(), 1)]
-    rows = [{"sid": r.stock_id, "net": float(r.net), "n": int(r.n_buy if side == "buy" else r.n_sell)} for r in d.itertuples()]
+    streaks = streaks or {}
+    lines = [f"{i}. {ctx.label(r.stock_id)} {fmt(r)}" + (f" 連 {streaks[r.stock_id]} 日上榜" if streaks.get(r.stock_id, 1) >= 2 else "")
+             for i, r in enumerate(d.itertuples(), 1)]
+    rows = [{"sid": r.stock_id, "net": float(r.net), "n": int(r.n_buy if side == "buy" else r.n_sell),
+             "streak": streaks.get(r.stock_id, 1)} for r in d.itertuples()]
     return lines, d["stock_id"].tolist(), rows
 
 
@@ -76,7 +79,9 @@ def build(ctx):
     today = _by_stock(ctx.conn, d1)
     three = _by_stock(ctx.conn, d3)
 
-    buy_lines, buy_picks, buy_rows = _lines(ctx, today, "buy")
+    top_buy = [] if today is None else today[today["net"] > 0].sort_values("net", ascending=False).head(TOP_N)["stock_id"].tolist()
+    buy_streaks = signal_streaks(ctx.conn, ctx.day, "s2_buy", top_buy)
+    buy_lines, buy_picks, buy_rows = _lines(ctx, today, "buy", buy_streaks)
     sell_lines, sell_picks, sell_rows = _lines(ctx, today, "sell")
     buy3_lines, buy3_picks, buy3_rows = _lines(ctx, three, "buy")
 

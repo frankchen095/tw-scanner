@@ -1,11 +1,25 @@
-name: 測試-新聞分析
+name: 測試-新聞分析與完整報表
 
+# 只能手動觸發,不會自動排程,不推播 LINE、不記錄訊號、不把資料存回 repo。
+#   mode = news:只測策略六(新聞 + AI 分析),印在記錄裡
+#   mode = full:跑完整流程(抓資料、所有策略、PDF),--dry-run --show-all;PDF 當成 artifact 讓你下載
 on:
-  workflow_dispatch: {}   # 只能手動觸發,不會自動排程
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "news = 只測策略六;full = 完整報表 dry-run"
+        type: choice
+        options: [news, full]
+        default: news
+      date:
+        description: "(full 用)報表日期 YYYY-MM-DD,留空 = 今天;假日請填最近一個交易日"
+        type: string
+        default: ""
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -15,7 +29,28 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: 只測功能3(新聞+AI分析),印在畫面上,不送Telegram不碰資料庫
+      - name: 安裝中文字型(PDF 用)
+        if: inputs.mode == 'full'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+
+      - name: 只測策略六(新聞 + AI 分析)
+        if: inputs.mode != 'full'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/03_news_test.py
+
+      - name: 完整 dry-run(--show-all:集保週資料、動能榜也強制顯示)
+        if: inputs.mode == 'full'
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/main.py --dry-run --show-all ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.mode == 'full'
+        with:
+          name: report-pdf
+          path: out/*.pdf
+          if-no-files-found: ignore

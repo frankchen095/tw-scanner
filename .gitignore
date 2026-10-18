@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 out/
+data/backtest.db
+data/backtest.db-journal
+data/backtest_*.csv

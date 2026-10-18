@@ -20,6 +20,32 @@ EXCLUDE_INDUSTRIES = {"ETF", "ETN", "存託憑證"}
 BIG_MARKET_VALUE = 5e10  # 市值門檻:500 億
 
 
+def signal_streaks(conn, day, strategy, picks):
+    """每檔 picks 連續幾個『已記錄的推播日』出現在這個策略(含今天,所以最少是 1)。
+    只讀 signals 表(正式推播才會記),dry-run 不記,所以連續天數只反映正式推播的紀錄;
+    中間有哪天沒推播/沒記錄,連續天數就會在那天斷掉。"""
+    picks = [str(x) for x in picks]
+    if not picks:
+        return {}
+    try:
+        dates = [r[0] for r in conn.execute(
+            "SELECT DISTINCT date FROM signals WHERE date < ? ORDER BY date DESC LIMIT 60", (day,))]
+        seen = {(r[0], r[1]) for r in conn.execute(
+            "SELECT date, stock_id FROM signals WHERE strategy=? AND date < ?", (strategy, day))}
+    except Exception:  # noqa: BLE001  (沒有 signals 表之類)
+        return {sid: 1 for sid in picks}
+    out = {}
+    for sid in picks:
+        n = 1
+        for d in dates:
+            if (d, sid) in seen:
+                n += 1
+            else:
+                break
+        out[sid] = n
+    return out
+
+
 def recent_dates(conn, table, end_date, n):
     """回傳某張表裡,<= end_date 的最近 n 個交易日(由舊到新排序)。"""
     rows = conn.execute(

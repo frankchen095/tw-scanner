@@ -37,20 +37,31 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import finmind_query  # noqa: E402
 
-UA = {"User-Agent": "Mozilla/5.0"}
+UA = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+}
 TIMEOUT = 30
 
 
-def _get_json(url, params=None, retries=2):
+def _headers_for(url):
+    h = dict(UA)
+    if "tpex.org.tw" in url:  # 櫃買的 OpenAPI 從 GitHub Actions 的 IP 偶爾會回 403,帶 Referer + 瀏覽器標頭、失敗多重試幾次
+        h["Referer"] = "https://www.tpex.org.tw/"
+    return h
+
+
+def _get_json(url, params=None, retries=3, timeout=None):
     last = None
-    for _ in range(retries + 1):
+    for i in range(retries + 1):
         try:
-            r = requests.get(url, params=params, headers=UA, timeout=TIMEOUT)
+            r = requests.get(url, params=params, headers=_headers_for(url), timeout=timeout or TIMEOUT)
             r.raise_for_status()
             return r.json()
         except Exception as e:  # noqa: BLE001
             last = e
-            time.sleep(2)
+            time.sleep(2 + 4 * i)
     raise RuntimeError(f"{url} 連線失敗: {last}")
 
 
@@ -128,6 +139,7 @@ class RiskTags:
         self.law_conf = {}  # sid -> date(未來5個交易日內)
         self.short_status = {}  # sid -> 融券狀態文字(策略三用)
         self.short_loaded = False
+        self.weekly_up, self.weekly_down, self.pledge_high = set(), set(), {}  # 第二批:靠 load_db() 載入
         self.ahead, cal_ok = _next_trading_days(day, 5)
         if not cal_ok:
             self.errors.append("交易日曆(FinMind TaiwanStockTradingDate)抓不到,『未來5個交易日』用週一~週五近似,國定假日可能有誤差")
@@ -299,7 +311,30 @@ class RiskTags:
         if sid in self.law_conf:
             d = self.law_conf[sid]
             out.append(f"〔法說 {d.month}/{d.day}〕")
+        if sid in self.weekly_up:
+            out.append("〔大戶增〕")
+        if sid in self.weekly_down:
+            out.append("〔大戶減〕")
+        if sid in self.pledge_high:
+            out.append(f"〔質押比高 {self.pledge_high[sid] * 100:.0f}%〕")
         return "".join(out)
+
+    def load_db(self, conn, weekly_rule):
+        """第二批標記(要讀資料庫,所以不在 __init__ 裡):
+        〔大戶增〕〔大戶減〕:最近一週集保資料符合 F 項(策略十四)的條件,整週(到下次資料更新前)都標;
+        〔質押比高〕:董事/監察人整體設質比 > 50%(月報,每月更新一次;只是追繳風險提示,跟多空無關)。
+        weekly_rule(conn) 由 s14_big_holders 提供,回傳 (up_set, down_set)。"""
+        try:
+            self.weekly_up, self.weekly_down = weekly_rule(conn)
+        except Exception as e:  # noqa: BLE001
+            self.errors.append(f"大戶持股標記:{str(e)[:100]}")
+        try:
+            self.pledge_high = {
+                sid: ratio for sid, ratio in conn.execute(
+                    "SELECT stock_id, pledge_ratio FROM insider_pledge_monthly WHERE pledge_ratio > 0.5 AND held_shares > 0")
+            }
+        except Exception as e:  # noqa: BLE001
+            self.errors.append(f"質押比高標記:{str(e)[:100]}")
 
     def tag_list(self, sid):
         """給 PDF 報表用:[(種類, 文字)],種類是 處置 / 注意 / 除權息 / 法說。"""
@@ -314,6 +349,12 @@ class RiskTags:
         if sid in self.law_conf:
             d = self.law_conf[sid]
             out.append(("法說", f"法說 {d.month}/{d.day}"))
+        if sid in self.weekly_up:
+            out.append(("大戶增", "大戶增"))
+        if sid in self.weekly_down:
+            out.append(("大戶減", "大戶減"))
+        if sid in self.pledge_high:
+            out.append(("質押", f"質押比高 {self.pledge_high[sid] * 100:.0f}%"))
         return out
 
     def short_label(self, sid):

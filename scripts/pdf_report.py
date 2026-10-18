@@ -102,6 +102,16 @@ def _amt(v, unit=1e8, signed=True, digits=2):
     return f'<span class="{cls}">{txt}</span>'
 
 
+def _mc(r):
+    """策略一/五、交集榜:〔融資未增〕chip"""
+    return '<span class="chip lo">融資未增</span>' if r.get("margin_clean") else ""
+
+
+def _streak_chip(r):
+    n = r.get("streak", 1)
+    return f'<span class="chip warn">連{n}日</span>' if n >= 2 else ""
+
+
 def _bar(frac, color):
     return f'<span class="bar {color}"><i style="width:{max(0, min(1, frac)) * 100:.0f}%"></i></span>'
 
@@ -127,7 +137,7 @@ def _line0(res, key):
 
 # ---------- 各區塊 ----------
 
-CATS = [("策略一", "一", "近高"), ("策略二", "二", "分點"), ("策略五", "五", "創高"), ("策略七", "七", "地緣"), ("法人", "法人", "買超")]
+CATS = [("價格位置", "價格", "位置"), ("策略二", "二", "分點"), ("策略七", "七", "地緣"), ("法人", "法人", "買超"), ("質押", "質", "押")]
 
 
 def _intersection(ctx, res):
@@ -144,10 +154,18 @@ def _intersection(ctx, res):
             for key, _, _ in CATS:
                 on = key in r["cats"]
                 mark = '<span class="dot">●</span>' if on else ""
+                if on and key == "價格位置" and r.get("price_kind"):
+                    mark = f'<span class="chip {"hi" if r["price_kind"] == "創高" else "info"}">{r["price_kind"]}</span>'
                 if key == "策略二" and "策略二賣超榜" in r["conflicts"]:
                     mark = '<span class="chip sell">賣</span>' + mark
                 cells += f'<td class="c">{mark}</td>'
             short = '<span class="chip short">空</span>' if any("策略三" in c for c in r["conflicts"]) else ""
+            for cname, ctext in (("借券大增榜", "借券增"), ("散戶接刀榜", "接刀"), ("申報轉讓榜", "申報轉讓"), ("解質榜", "解質")):
+                if cname in r["conflicts"]:
+                    short += f'<span class="chip short">{ctext}</span>'
+            short += _mc(r)
+            if r.get("streak", 1) >= 2:
+                short += f'<span class="chip warn">連{r["streak"]}日</span>'
             body += (f'<tr class="{"conf" if conf else ""}"><td class="n">{i}</td>'
                      f'<td class="l">{_stock(ctx, r["sid"], short)}</td>{cells}</tr>')
         return (f'<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th>{head}</tr></thead>'
@@ -155,7 +173,8 @@ def _intersection(ctx, res):
 
     a, b = _split(rows, 2)
     legend = ('<p class="legend"><span>● 入選該策略</span><span><span class="chip sell">賣</span> 同時在策略二賣超榜'
-              '(訊號衝突,整列以底色標示)</span><span><span class="chip short">空</span> 同時在策略三(漲停放空)</span></p>')
+              '(訊號衝突,整列以底色標示)</span><span><span class="chip short">空</span> 同時在策略三(漲停放空)</span>'
+              '<span><span class="chip short">借券增</span><span class="chip short">接刀</span><span class="chip short">申報轉讓</span> 同時在其他空方榜</span></p>')
     body = legend + f'<div class="grid g2">{table(a, 1)}{table(b, len(a) + 1) if b else ""}</div>'
     return _section("交集榜", len(rows), "同時出現在兩類以上偏多策略", body)
 
@@ -169,7 +188,7 @@ def _s1(ctx, res):
 
     def table(chunk, start):
         body = "".join(
-            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"])}</td><td>{r["close"]:,.2f}</td>'
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"], _mc(r))}</td><td>{r["close"]:,.2f}</td>'
             f'<td>{r["gap"] * 100:.1f}%{_bar(1 - r["gap"] / mx * 0.9, "blue")}</td></tr>'
             for i, r in enumerate(chunk, start))
         return (f'<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th>收盤</th><th>距60日高</th></tr></thead>'
@@ -190,7 +209,7 @@ def _s2(ctx, res):
         rows = _rows_of(res, key)
         mx = max((abs(r["net"]) for r in rows), default=1) or 1
         body = "".join(
-            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"])}</td>'
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"], _streak_chip(r))}</td>'
             f'<td>{_amt(r["net"])}{_bar(abs(r["net"]) / mx, color)}</td><td>{r["n"]}</td></tr>'
             for i, r in enumerate(rows, 1)) or '<tr><td class="l" colspan="4">沒有符合的股票</td></tr>'
         return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
@@ -247,7 +266,7 @@ def _s5(ctx, res):
         body = ""
         for i, r in enumerate(chunk, start):
             chg = "-" if r["chg"] is None else _amt(r["chg"], 1, True, 1) + "%"
-            body += f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"])}</td><td>{r["close"]:,.2f}</td><td>{chg}</td></tr>'
+            body += f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, r["sid"], _mc(r))}</td><td>{r["close"]:,.2f}</td><td>{chg}</td></tr>'
         return (f'<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th>收盤</th><th>漲跌</th></tr></thead>'
                 f'<tbody>{body}</tbody></table></div>')
 
@@ -334,6 +353,244 @@ def _s10(ctx, res):
     return _section("策略十 美日族群創新高", len(rows), sub, body)
 
 
+
+def _group(ctx, res):
+    r = res.get("group")
+    if not r:
+        return ""
+    rows = r.get("meta", {}).get("rows", [])
+    sub = "同一族群當天 ≥3 檔出現在偏多榜(自訂族群 data/groups.json;預設產業別要 ≥5 檔且 ≥20%);族群內有空方訊號會標出"
+    if not rows:
+        return _section("族群訊號", 0, sub, _msg(r["lines"][0] if r["lines"] else "今天沒有族群共振"))
+    cards = ""
+    for g in rows:
+        run = f'<span class="chip warn">連{g["streak"]}日</span>' if g.get("streak", 1) >= 2 else ""
+        chips = "".join(
+            f'<span class="sc">{esc(ctx.name(m["sid"]))} <span class="code">{esc(m["sid"])}</span> '
+            f'<span class="loc">{esc("+".join(m["tags"]))}</span></span>' for m in g["members"])
+        bear = ""
+        if g["bears"]:
+            bear = ('<div class="loc" style="color:#b3261e;margin-top:3px">⚠族群內有空方訊號:'
+                    + "、".join(f'{esc(ctx.name(b["sid"]) or b["sid"])}〔{esc(b["label"])}〕' for b in g["bears"]) + "</div>")
+        cards += (f'<div class="card" style="padding:6px 9px"><div style="font-weight:700;margin-bottom:3px">{esc(g["group"])} '
+                  f'<span class="loc">{len(g["members"])} 檔</span>{run}</div><div>{chips}</div>{bear}</div>')
+    return _section("族群訊號", len(rows), sub, f'<div class="grid g2">{cards}</div>')
+
+
+def _e_knife(ctx, res):
+    r = res.get("e_knife")
+    sub = "市值>500億,近5日融資餘額增加≥10% 但同期股價漲幅<2%(偏空;進交集榜訊號衝突;成效追蹤反向計算)"
+    if not r:
+        return ""
+    rows = r.get("meta", {}).get("rows", [])
+    if not rows:
+        return _section("散戶接刀榜", 0, sub, _msg(r["lines"][0] if r["lines"] else "今天沒有符合條件的股票"))
+
+    def table(chunk, start):
+        body = "".join(
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td>'
+            f'<td>{_amt(x["margin_pct"] * 100, 1, True, 1)}%</td><td>{x["bal"]:,.0f}</td>'
+            f'<td>{_amt(x["px"] * 100, 1, True, 1)}%</td></tr>' for i, x in enumerate(chunk, start))
+        return ('<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th>融資5日</th>'
+                f'<th>融資餘額(張)</th><th>股價5日</th></tr></thead><tbody>{body}</tbody></table></div>')
+
+    a, b = _split(rows, 2)
+    return _section("散戶接刀榜", len(rows), sub, f'<div class="grid g2">{table(a, 1)}{table(b, len(a) + 1) if b else ""}</div>')
+
+
+def _s13(ctx, res):
+    r = res.get("s13")
+    if not r:
+        return ""
+    sub = "市值>500億;單日餘額增加≥流通股數0.5%,或連3日增加且合計≥0.3%(偏空)。單位:萬張"
+    up = r.get("meta", {}).get("rows", [])
+    down = res.get("s13_cover", {}).get("meta", {}).get("rows", [])
+    if not up and not down and r["lines"] and "今日無資料" in r["lines"][0]:
+        return _section("策略十三 借券賣出餘額", None, sub, _msg(r["lines"][0]))
+
+    def wz(v, signed=False):
+        return f"{v / 1e7:+,.2f}" if signed else f"{v / 1e7:,.2f}"
+
+    def card(title, rows, cover):
+        body = "".join(
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td><td>{wz(x["bal"])}</td>'
+            f'<td>{x["ratio"] * 100:.2f}%</td><td>{_amt(x["day"] / 1e7, 1, True, 2)}</td>'
+            + ("" if cover else f'<td>{_amt(x["three"] / 1e7, 1, True, 2)}</td><td class="c">{esc(x["tag"])}</td>')
+            + "</tr>" for i, x in enumerate(rows, 1)) or '<tr><td class="l" colspan="7">今天沒有符合條件的股票</td></tr>'
+        extra = "" if cover else '<th>3日</th><th class="c">條件</th>'
+        return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
+                f'<th>餘額</th><th>占流通</th><th>單日</th>{extra}</tr></thead><tbody>{body}</tbody></table></div>')
+
+    body = (f'<div class="grid g2">{card("借券餘額大增(偏空)", up, False)}'
+            f'{card("借券餘額大減 Top5(回補,只顯示)", down, True)}</div>')
+    return _section("策略十三 借券賣出餘額", len(up), sub, body)
+
+
+def _s14(ctx, res):
+    r = res.get("s14")
+    if not r:
+        return ""
+    m = r.get("meta", {})
+    sub = f"集保週資料 {m.get('data_date', '')}(只在新一週入庫日出現);大戶=1,000張以上,散戶=400張以下;市值>500億"
+    up = m.get("rows", [])
+    down = res.get("s14_down", {}).get("meta", {}).get("rows", [])
+    if not up and not down and r["lines"] and "今日無資料" in r["lines"][0]:
+        return _section("策略十四 大戶持股比", None, sub, _msg(r["lines"][0]))
+
+    def card(title, rows):
+        body = "".join(
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td>'
+            f'<td>{x["b2"]:.1f}→{x["b1"]:.1f}→{x["b0"]:.1f}</td><td>{_amt(x["b0"] - x["b2"], 1, True, 2)}</td>'
+            f'<td>{_amt(x["r0"] - x["r2"], 1, True, 2)}</td></tr>' for i, x in enumerate(rows, 1)
+        ) or '<tr><td class="l" colspan="5">本週沒有符合條件的股票</td></tr>'
+        return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
+                f'<th>大戶%(2週前→上週→本週)</th><th>大戶Δpp</th><th>散戶Δpp</th></tr></thead><tbody>{body}</tbody></table></div>')
+
+    return _section("策略十四 大戶持股比", len(up), sub,
+                    f'<div class="grid g2">{card("上升(偏多)", up)}{card("下降 Top5(籌碼轉差,只顯示)", down)}</div>')
+
+
+def _gm(vals):
+    return "→".join("-" if v is None else f"{v * 100:.1f}" for v in vals) + "%"
+
+
+def _s15(ctx, res):
+    ev = res.get("s15")
+    if not ev:
+        return ""
+    out = ""
+    m = ev.get("meta", {})
+    rows = m.get("rows", [])
+    sub = "今天新公布的季報(市值>500億):毛利率連2季升且高於去年同季〔a〕/ 營業利益轉正〔b〕/ 毛利率單季+3pp〔c〕"
+    if rows:
+        body = "".join(
+            f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td><td>{esc(x["q"])}</td>'
+            f'<td>{_gm(x["gms"])}</td><td class="c">{esc(x["tag"])}</td>'
+            f'<td>{"-" if x["om"] is None else format(x["om"] * 100, ".1f") + "%"}</td></tr>' for i, x in enumerate(rows, 1))
+        note = ""
+        if m.get("total", 0) > len(rows):
+            note += f"今天共 {m['total']} 檔符合,只列前 {len(rows)} 檔。 "
+        if m.get("skipped"):
+            note += f"略過 {m['skipped']} 檔(沒有毛利資料,例如金融股)。"
+        tbl = ('<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th>季別</th><th>毛利率 近4季</th>'
+               f'<th class="c">條件</th><th>營益率</th></tr></thead><tbody>{body}</tbody></table></div>'
+               + (f'<p class="foot">{esc(note)}</p>' if note else ""))
+        out += _section("策略十五 財報毛利率轉折", len(rows), sub, tbl)
+    elif ev["lines"] and "今日無資料" in ev["lines"][0]:
+        out += _section("策略十五 財報毛利率轉折", None, sub, _msg(ev["lines"][0]))
+    else:
+        out += _section("策略十五 財報毛利率轉折", 0, sub, _msg("今天沒有符合條件的新季報" + (
+            f"(略過 {m['skipped']} 檔沒有毛利資料)" if m.get("skipped") else "")))
+    wk = res.get("s15_weak", {}).get("meta", {}).get("rows", [])
+    if wk:
+        body = "".join(f'<tr><td class="l">{_stock(ctx, x["sid"])}</td><td>{_gm(x["gms"])}</td></tr>' for x in wk)
+        out += (f'<div class="sec"><div class="card"><div class="ct">〔毛利轉弱〕毛利率和營益率都連2季下降(只顯示)</div><table><thead><tr>'
+                f'<th class="l">股票</th><th>毛利率</th></tr></thead><tbody>{body}</tbody></table></div></div>')
+
+    def mom(key, title):
+        r = res.get(key)
+        if not r:
+            return ""
+        mm = r.get("meta", {})
+        rws = mm.get("rows", [])
+        if not rws:
+            return f'<div class="sec"><div class="msg">{esc(title)}:本期沒有符合條件的股票</div></div>'
+        body = ""
+        for x in rws:
+            flag = ""
+            if x.get("label") == "新進":
+                flag += '<span class="chip buy">新進</span>'
+            elif x.get("streak", 1) >= 2:
+                flag += f'<span class="chip warn">連{x["streak"]}期</span>'
+            if x["yearly"]:
+                flag += '<span class="chip info">年增</span>'
+            if x["high"]:
+                flag += '<span class="chip hi">高成長</span>'
+            yoy = "-" if x["yoy"] is None else f'{x["yoy"] * 100:+.0f}%(3M {x["yoy3"] * 100:+.0f}%)'
+            body += (f'<tr><td class="l">{_stock(ctx, x["sid"], flag)}</td><td>{yoy}</td>'
+                     f'<td>{_gm(x["gms"])}</td><td>{_gm(x["oms"])}</td></tr>')
+        ex = ""
+        if mm.get("exited"):
+            ex = f'<p class="foot">掉出榜:{esc("、".join((ctx.name(s) or s) + "(" + s + ")" for s in mm["exited"]))}</p>'
+        return (f'<div class="sec"><div class="card"><div class="ct">{esc(title)} <span class="loc">{esc(mm.get("reason", ""))}</span></div>'
+                f'<table><thead><tr><th class="l">股票</th><th>營收YoY</th><th>毛利率(Q-2→Q)</th><th>營益率(Q-2→Q)</th></tr></thead>'
+                f'<tbody>{body}</tbody></table></div>{ex}</div>')
+
+    if "s15_mom" in res and (res["s15_mom"].get("meta", {}).get("reason") or res["s15_mom"].get("meta", {}).get("rows")):
+        out += _section("基本面動能榜", None,
+                        "營收年增 + 毛利率 + 營益率連續季增(市值>500億);只在月營收公布後第一個交易日、或有新季報入庫的日子出現",
+                        mom("s15_mom", "〔三升〕營收年增 + 毛利率 + 營益率連續季增") + mom("s15_mom2", "〔二升〕毛利率、營益率連續季增但營收年增沒過"))
+    return out
+
+
+def _s11(ctx, res):
+    r = res.get("s11")
+    if not r:
+        return ""
+    m = r.get("meta", {})
+    sub = ("董監事/經理人/大股東當月設質股數變化(月頻:這個月 vs 上個月),|變化|≥10% 持股才列;"
+           "〔設質〕偏多、〔解質〕偏空;月報看不出哪一天,也分不出借款到期還款等雜訊")
+    up = m.get("rows", [])
+    down = res.get("s11_release", {}).get("meta", {}).get("rows", [])
+    if not up and not down and r["lines"] and "今日無資料" in r["lines"][0]:
+        return _section("策略十一 質押/解質(月頻)", None, sub, _msg(r["lines"][0]))
+
+    def card(title, rows):
+        body = ""
+        for i, x in enumerate(rows, 1):
+            mv = "-" if not x.get("mv") else f'{x["mv"] / 1e8:,.0f}億'
+            body += (f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td><td>{mv}</td>'
+                     f'<td class="l">{esc(x["title"])} {esc(x["name"])}</td><td>{x["delta"] / 1e4:+,.0f}萬股</td>'
+                     f'<td>{x["ratio"] * 100:.0f}%</td><td>{x["total_ratio"] * 100:.0f}%</td></tr>')
+        body = body or '<tr><td class="l" colspan="7">本月沒有符合條件的</td></tr>'
+        return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
+                f'<th>市值</th><th class="l">申報人</th><th>設質變化</th><th>占持股</th><th>累計質押</th></tr></thead>'
+                f'<tbody>{body}</tbody></table></div>')
+
+    foot = f'<p class="foot">資料月份 {esc(m.get("ym", ""))} 對比 {esc(m.get("prev", ""))}</p>'
+    return _section("策略十一 質押/解質(月頻)", len(up) + len(down), sub,
+                    card("〔設質〕設質增加(偏多)", up) + card("〔解質〕設質減少(偏空)", down) + foot)
+
+
+def _s16(ctx, res):
+    r = res.get("s16")
+    if not r:
+        return ""
+    sub = "董監事/經理人/大股東事前申報(今天出表的申報);門檻:占其持股≥10% 或 約≥1億元;一般/鉅額交易=偏空,信託/贈與只列出"
+    rows = r.get("meta", {}).get("rows", [])
+    if not rows:
+        return _section("策略十六 內部人申報轉讓", 0, sub, _msg(r["lines"][0] if r["lines"] else "今天沒有申報"))
+    body = ""
+    for i, x in enumerate(rows, 1):
+        mv = ctx.mv.get(x["sid"]) if ctx.mv else None
+        kind = f'<span class="chip {"short" if x["side"] == "sell" else "info"}">{esc(x["kind"])}</span>'
+        ratio = "-" if x["ratio"] is None else f'{x["ratio"] * 100:.1f}%'
+        amt = "-" if x["amount"] is None else f'{x["amount"] / 1e8:,.2f}億'
+        body += (f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"], kind)}</td>'
+                 f'<td>{"-" if not mv else format(mv / 1e8, ",.0f") + "億"}</td><td class="l">{esc(x["identity"])} {esc(x["name"])}</td>'
+                 f'<td>{x["shares"] / 1e4:,.0f}萬股</td><td>{ratio}</td><td>{amt}</td></tr>')
+    tbl = ('<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th>市值</th><th class="l">申報人</th>'
+           f'<th>預定轉讓</th><th>占持股</th><th>約金額</th></tr></thead><tbody>{body}</tbody></table></div>'
+           '<p class="foot">事前申報不等於一定會賣,申報股數是上限,申報後3日起1個月內可賣。</p>')
+    return _section("策略十六 內部人申報轉讓", len(rows), sub, tbl)
+
+
+def _s12(ctx, res):
+    r = res.get("s12")
+    if not r:
+        return ""
+    sub = "近26小時標題同時含負面關鍵字與上市櫃公司名稱的新聞(純規則,不經AI)。標題含公司名不代表那家公司是當事人,請自己點進去看"
+    rows = r.get("meta", {}).get("rows", [])
+    if not rows:
+        return _section("負面新聞關鍵字掃描", 0, sub, _msg(r["lines"][0] if r["lines"] else "今天沒有"))
+    body = "".join(
+        f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"], "<span class=chip>" + esc(x["keyword"]) + "</span>")}</td>'
+        f'<td class="l">{esc(x["title"])}</td><td class="l">{esc(x["media"])}</td></tr>' for i, x in enumerate(rows, 1))
+    tbl = ('<div class="card"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l">標題</th>'
+           f'<th class="l">媒體</th></tr></thead><tbody>{body}</tbody></table></div>')
+    return _section("負面新聞關鍵字掃描", len(rows), sub, tbl)
+
+
 def _mdw(iso):
     d = date.fromisoformat(iso)
     return f"{d.month}/{d.day}({'一二三四五六日'[d.weekday()]})"
@@ -358,7 +615,7 @@ def _cal(ctx, res):
     econ += [(e["date"], "", _mdw(e["date"]), e["country"], e["name"], e["cons"], e["prev"]) for e in m.get("econ", [])]
     econ.sort(key=lambda x: x[0])
     econ_body = "".join(
-        f'<tr class="{"conf" if k else ""}"><td class="l">{d}</td><td class="l">{c}</td><td class="l">{esc(n)}</td>'
+        f'<tr class="{"conf" if k else ""}"><td class="l" style="white-space:nowrap">{d}</td><td class="l" style="white-space:nowrap">{c}</td><td class="l">{esc(n)}</td>'
         f'<td>{esc(cons) or "-"}</td><td>{esc(prev) or "-"}</td></tr>'
         for _, k, d, c, n, cons, prev in econ) or '<tr><td class="l" colspan="5">這段期間沒有查到</td></tr>'
     econ_card = ('<div class="card"><div class="ct">重大經濟數據與央行(美國)</div><table><thead><tr><th class="l">日期</th>'
@@ -390,41 +647,89 @@ def _cal(ctx, res):
 
 
 def parse_s6(text):
-    blocks, cur = [], None
-    for raw in text.splitlines():
+    """舊格式(沒有 ◆ 分段)的解析,回傳 block 清單。新格式請用 parse_s6_sections。"""
+    return [b for sec in parse_s6_sections(text)["sections"] for b in sec["blocks"]]
+
+
+def parse_s6_sections(text):
+    """解析策略六輸出:◆ 段名 → 區塊(利多/利空、個股、原因);沒有 ◆ 就當成單一沒有段名的段。
+    回傳 {"sections": [{"name", "blocks", "none"}], "tomorrow": str|None, "notes": [str]}"""
+    sections, cur_sec, cur = [], None, None
+    tomorrow, notes = None, []
+
+    def sec(name=""):
+        nonlocal cur_sec
+        cur_sec = {"name": name, "blocks": [], "none": False}
+        sections.append(cur_sec)
+        return cur_sec
+
+    for raw in (text or "").splitlines():
         line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("◆"):
+            sec(line.lstrip("◆").strip())
+            cur = None
+            continue
+        if line.startswith("明日重要事件"):
+            tomorrow = re.sub(r"^明日重要事件[:：]\s*", "", line)
+            cur = None
+            continue
+        if line.startswith("(") or line.startswith("（"):
+            notes.append(line)
+            cur = None
+            continue
         m = re.match(r"^(利多|利空)[:：]\s*(.*)$", line)
         if m:
+            if cur_sec is None:
+                sec("")
             cur = {"dir": m.group(1), "industry": m.group(2), "stocks": [], "reason": ""}
-            blocks.append(cur)
+            cur_sec["blocks"].append(cur)
         elif cur is not None and (m := re.match(r"^個股[:：]\s*(.*)$", line)):
             cur["stocks"] = [t.strip() for t in re.split(r"[、,，]", m.group(1)) if t.strip() and t.strip() != "無"]
         elif cur is not None and (m := re.match(r"^原因[:：]\s*(.*)$", line)):
             cur["reason"] = m.group(1)
-        elif cur is not None and line and not line.startswith("(AI"):
+        elif cur is not None and not line.startswith("【"):
             cur["reason"] += line
-    return blocks
+        elif cur is None and cur_sec is not None and line in ("無", "无") and not cur_sec["blocks"]:
+            cur_sec["none"] = True
+    return {"sections": sections, "tomorrow": tomorrow, "notes": notes}
+
+
+def _s6_block(b):
+    tag = f'<span class="tag {"bull" if b["dir"] == "利多" else "bear"}">{b["dir"]}</span>'
+    chips = ""
+    for s in b["stocks"]:
+        m = re.match(r"^(.*?)\((\w+|\?)\)$", s)
+        chips += (f'<span class="sc">{esc(m.group(1))} <span class="code">{esc(m.group(2))}</span></span>' if m
+                  else f'<span class="sc">{esc(s)}</span>')
+    if not chips:
+        chips = '<span class="loc">無特定個股</span>'
+    return (f'<div class="item"><div><div class="t">{tag}{esc(b["industry"])}</div><div>{chips}</div></div>'
+            f'<div class="why">{esc(b["reason"])}</div></div>')
 
 
 def _s6(res_text):
-    sub = "AI零組件供應鏈+總經"
-    blocks = parse_s6(res_text or "")
-    if not blocks:
+    sub = "固定三段:供需訊號 / 總經大事 / 財報展望解讀(沒變化的段寫「無」)"
+    parsed = parse_s6_sections(res_text or "")
+    secs = [x for x in parsed["sections"] if x["blocks"] or x["name"]]
+    if not secs:
         raw = (res_text or "今天沒有時事分析").strip()
         return _section("策略六 時事分析", None, sub, f'<div class="msg">{esc(raw)}</div>')
-    items = ""
-    for b in blocks:
-        tag = f'<span class="tag {"bull" if b["dir"] == "利多" else "bear"}">{b["dir"]}</span>'
-        chips = ""
-        for s in b["stocks"]:
-            m = re.match(r"^(.*?)\((\w+|\?)\)$", s)
-            chips += (f'<span class="sc">{esc(m.group(1))} <span class="code">{esc(m.group(2))}</span></span>' if m
-                      else f'<span class="sc">{esc(s)}</span>')
-        if not chips:
-            chips = '<span class="loc">無特定個股</span>'
-        items += (f'<div class="item"><div><div class="t">{tag}{esc(b["industry"])}</div><div>{chips}</div></div>'
-                  f'<div class="why">{esc(b["reason"])}</div></div>')
-    return _section("策略六 時事分析", None, sub, f'<div class="news">{items}</div>')
+    body = ""
+    for x in secs:
+        head = f'<div class="ct" style="margin-top:6px">{esc(x["name"])}</div>' if x["name"] else ""
+        if x["blocks"]:
+            body += head + f'<div class="news">{"".join(_s6_block(b) for b in x["blocks"])}</div>'
+        else:
+            body += head + '<div class="msg">無</div>'
+    foot = ""
+    if parsed["tomorrow"]:
+        foot += f'<p class="foot"><b>明日重要事件:</b>{esc(parsed["tomorrow"])}</p>'
+    notes = [n for n in parsed["notes"] if not n.startswith("(AI")]
+    if notes:
+        foot += '<p class="foot">' + "<br>".join(esc(n) for n in notes) + "</p>"
+    return _section("策略六 時事分析", None, sub, body + foot)
 
 
 # ---------- 組裝 ----------
@@ -442,6 +747,19 @@ def summary_text(ctx, res):
         parts.append("今天沒有同時出現在兩類以上偏多策略的股票。")
     s3 = _rows_of(res, "s3")
     parts.append(f"策略三今天有 {len(s3)} 檔符合條件。" if s3 else "策略三今天沒有符合條件的股票。")
+    grp = _rows_of(res, "group")
+    if grp:
+        top = max(grp, key=lambda g: len(g["members"]))
+        parts.append(f"族群共振 {len(grp)} 個,最多檔的是{top['group']}({len(top['members'])} 檔)。")
+    elif "group" in res:
+        parts.append("今天沒有族群共振。")
+    bears = [(k, n) for k, n in (("借券大增", len(res.get("s13", {}).get("picks", []))),
+                                 ("散戶接刀", len(res.get("e_knife", {}).get("picks", []))),
+                                 ("內部人申報轉讓(賣)", len(res.get("s16", {}).get("picks", [])))) if n]
+    if bears:
+        parts.append("空方榜:" + "、".join(f"{k} {n} 檔" for k, n in bears) + "。")
+    if res.get("s14") and res["s14"].get("meta", {}).get("rows"):
+        parts.append(f"集保新一週資料:大戶持股比上升 {len(res['s14']['meta']['rows'])} 檔。")
     if getattr(ctx, "mv_note", None):
         parts.append(ctx.mv_note + "。")
     return "".join(parts)
@@ -450,20 +768,22 @@ def summary_text(ctx, res):
 def build_html(ctx, day, res, s6_text=None, perf_text=None, notes=None):
     css = CSS.replace("__DAY__", day)
     page1 = (f'<div class="kicker">{esc(day)} 盤後</div><h1>台股盤後掃描</h1><p class="lead">{esc(summary_text(ctx, res))}</p><hr>'
-             + _intersection(ctx, res))
-    page2 = _s1(ctx, res) + _s2(ctx, res)
-    page3 = _s3(ctx, res) + _s4(ctx, res) + _s5(ctx, res) + _s7(ctx, res)
-    page4 = _s8(ctx, res) + _s9(ctx, res) + _s10(ctx, res)
-    page5 = _s6(s6_text)
+             + _intersection(ctx, res) + _group(ctx, res))
+    page_price = _s1(ctx, res)
+    page_s2 = _s5(ctx, res) + _s2(ctx, res)
+    page_inst = _s8(ctx, res) + _s9(ctx, res) + _s11(ctx, res) + _s16(ctx, res) + _s14(ctx, res)
+    page_bear = _s3(ctx, res) + _s13(ctx, res) + _e_knife(ctx, res)
+    page_event = _s4(ctx, res) + _s15(ctx, res) + _s12(ctx, res)
+    page_geo = _s7(ctx, res) + _s10(ctx, res)
+    page_cal = _cal(ctx, res)
+    page_s6 = _s6(s6_text)
     if perf_text:
-        page5 += _section("成效追蹤", None, "每週五彙總", f'<div class="card"><pre class="perf">{esc(perf_text)}</pre></div>')
+        page_s6 += _section("成效追蹤", None, "每週五彙總", f'<div class="card"><pre class="perf">{esc(perf_text)}</pre></div>')
     foot = ""
     if notes:
         foot = '<p class="foot">' + "<br>".join(esc(n) for n in notes) + "</p>"
-    pages = [page1, page2, page3, page4, page5 + foot]
-    cal = _cal(ctx, res)
-    if cal:
-        pages.append(cal)
+    pages = [page1, page_price + page_s2, page_inst, page_bear + page_event, page_geo + page_cal, page_s6 + foot]
+    pages = [p for p in pages if p.strip()]
     body = "".join(f'<div class="{"page" if i else ""}">{p}</div>' for i, p in enumerate(pages))
     return f'<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>台股盤後掃描 {esc(day)}</title><style>{css}</style></head><body>{body}</body></html>'
 
