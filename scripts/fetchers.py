@@ -319,7 +319,8 @@ def fetch_margin(conn, day):
 def fetch_short_balance(conn, day):
     """借券賣出餘額日資料(全市場一次查)。"""
     valid = get_valid_stock_ids(conn)
-    have = {r[0] for r in conn.execute("SELECT DISTINCT date FROM short_balance_daily")}
+    # 只有『賣出量/還券量』欄位也有值的日子才算補好了(舊資料只有餘額,這幾天會重抓一次)
+    have = {r[0] for r in conn.execute("SELECT DISTINCT date FROM short_balance_daily WHERE sbl_sales IS NOT NULL")}
     got = 0
     for d in _weekdays_back(day):
         if d in have and d != day:
@@ -329,9 +330,11 @@ def fetch_short_balance(conn, day):
             continue
         df = df[df["stock_id"].astype(str).isin(valid)]
         conn.executemany(
-            "INSERT OR REPLACE INTO short_balance_daily VALUES (?,?,?,?,?)",
+            "INSERT OR REPLACE INTO short_balance_daily "
+            "(date, stock_id, sbl_bal, sbl_prev, sbl_quota, sbl_sales, sbl_returns, sbl_adj) VALUES (?,?,?,?,?,?,?,?)",
             [(d, str(r.stock_id), float(r.SBLShortSalesCurrentDayBalance), float(r.SBLShortSalesPreviousDayBalance),
-              float(r.SBLShortSalesQuota)) for r in df.itertuples()],
+              float(r.SBLShortSalesQuota), float(r.SBLShortSalesShortSales), float(r.SBLShortSalesReturns),
+              float(r.SBLShortSalesAdjustments)) for r in df.itertuples()],
         )
         conn.commit()
         got += 1

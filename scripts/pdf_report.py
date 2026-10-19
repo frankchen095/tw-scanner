@@ -404,7 +404,7 @@ def _s13(ctx, res):
     r = res.get("s13")
     if not r:
         return ""
-    sub = "市值>500億;單日餘額增加≥流通股數0.5%,或連3日增加且合計≥0.3%(偏空)。單位:萬張"
+    sub = "市值>500億;任一成立:單日餘額增加≥流通股數0.5%〔a〕/ 連3日增加且合計≥0.3%〔b〕/ 單日借券淨增加(賣出−還券)× 收盤價 ≥1億元〔c〕(偏空)。單位:萬張、億元"
     up = r.get("meta", {}).get("rows", [])
     down = res.get("s13_cover", {}).get("meta", {}).get("rows", [])
     if not up and not down and r["lines"] and "今日無資料" in r["lines"][0]:
@@ -417,9 +417,9 @@ def _s13(ctx, res):
         body = "".join(
             f'<tr><td class="n">{i}</td><td class="l">{_stock(ctx, x["sid"])}</td><td>{wz(x["bal"])}</td>'
             f'<td>{x["ratio"] * 100:.2f}%</td><td>{_amt(x["day"] / 1e7, 1, True, 2)}</td>'
-            + ("" if cover else f'<td>{_amt(x["three"] / 1e7, 1, True, 2)}</td><td class="c">{esc(x["tag"])}</td>')
-            + "</tr>" for i, x in enumerate(rows, 1)) or '<tr><td class="l" colspan="7">今天沒有符合條件的股票</td></tr>'
-        extra = "" if cover else '<th>3日</th><th class="c">條件</th>'
+            + ("" if cover else f'<td>{_amt(x["three"] / 1e7, 1, True, 2)}</td><td>{x.get("sales", 0) / 1e7:,.2f}</td><td>{x.get("returns", 0) / 1e7:,.2f}</td><td>{x.get("amt", 0) / 1e8:+.2f}</td><td class="c">{esc(x["tag"])}</td>')
+            + "</tr>" for i, x in enumerate(rows, 1)) or '<tr><td class="l" colspan="10">今天沒有符合條件的股票</td></tr>'
+        extra = "" if cover else '<th>3日</th><th>賣出</th><th>還券</th><th>淨增加金額(億)</th><th class="c">條件</th>'
         return (f'<div class="card"><div class="ct">{title}</div><table><thead><tr><th class="l">#</th><th class="l">股票</th>'
                 f'<th>餘額</th><th>占流通</th><th>單日</th>{extra}</tr></thead><tbody>{body}</tbody></table></div>')
 

@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS margin_daily (
 -- 借券賣出餘額日資料(策略 D):單位=股
 CREATE TABLE IF NOT EXISTS short_balance_daily (
     date TEXT, stock_id TEXT, sbl_bal REAL, sbl_prev REAL, sbl_quota REAL,
+    sbl_sales REAL, sbl_returns REAL, sbl_adj REAL,
     PRIMARY KEY (date, stock_id)
 );
 
@@ -284,6 +285,12 @@ def _migrate(conn):
             );
             """
         )
+
+    # 3c. short_balance_daily 新增 當日借券賣出量 / 還券量 / 調整(策略十三用『賣出 − 還券』算淨增加);舊資料沒有這三欄,下次抓資料時會補
+    sb_cols = _columns(conn, "short_balance_daily")
+    for col in ("sbl_sales", "sbl_returns", "sbl_adj"):
+        if col not in sb_cols:
+            conn.execute(f"ALTER TABLE short_balance_daily ADD COLUMN {col} REAL")
 
     # 4. 股本快取有『集保表合計列被重複加總,股數變兩倍』的錯誤,清掉讓它重抓
     version = conn.execute("PRAGMA user_version").fetchone()[0]

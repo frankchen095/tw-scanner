@@ -251,9 +251,11 @@ def backfill(conn, d_from, d_to, extended=False, per_hour=4500, workers=4):
 
     def save_sbl(d, df):
         df = df[df["stock_id"].astype(str).isin(valid)]
-        conn.executemany("INSERT OR REPLACE INTO short_balance_daily VALUES (?,?,?,?,?)",
+        conn.executemany("INSERT OR REPLACE INTO short_balance_daily "
+                         "(date, stock_id, sbl_bal, sbl_prev, sbl_quota, sbl_sales, sbl_returns, sbl_adj) VALUES (?,?,?,?,?,?,?,?)",
                          [(d, str(r.stock_id), float(r.SBLShortSalesCurrentDayBalance), float(r.SBLShortSalesPreviousDayBalance),
-                           float(r.SBLShortSalesQuota)) for r in df.itertuples()])
+                           float(r.SBLShortSalesQuota), float(r.SBLShortSalesShortSales), float(r.SBLShortSalesReturns),
+                           float(r.SBLShortSalesAdjustments)) for r in df.itertuples()])
 
     per_day("daily_price", "TaiwanStockPrice", save_price, "股價")
     per_day("daily_market_value", "TaiwanStockMarketValue", save_mv, "市值")
